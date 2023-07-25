@@ -1,402 +1,400 @@
 #include <X11/X.h>
-#include <X11/Xproto.h>
 #include <X11/Xlib.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <X11/Xutil.h>
-
-static int (*xerrorxlib)(Display *, XErrorEvent *);
-
-void loop();
 
 
-void OnCreateNotify(XEvent *e);
-void OnDestroyNotify(XEvent *e);
-void OnReparentNotify(XEvent *e);
-void OnMapNotify(XEvent *e);
-void OnUnmapNotify(XEvent *e);
-void OnConfigureNotify(XEvent *e);
-void OnMapRequest(XEvent *e);
-void OnConfigureRequest(XEvent *e);
-void OnButtonPress(XEvent *e);
-void OnButtonRelease(XEvent *e);
-void OnMotionNotify(XEvent *e);
-void OnKeyPress(XEvent *e);
-void OnKeyRelease(XEvent *e);
+#define TOTAL_TAGS 10
+#define DEFAULT_MASTER 0.55
 
-
-
-
-
-void add_keybindings(Window w) ;
-/* static void (*handler[LastEvent]) (XEvent *) = { */
-/*   [ButtonPress] = OnButtonPress, */
-/*   [ClientMessage] = clientmessage, */
-/*   [ConfigureRequest] = configurerequest, */
-/*   [ConfigureNotify] = configurenotify, */
-/*   [DestroyNotify] = destroynotify, */
-/*   [EnterNotify] = enternotify, */
-/*   [Expose] = expose, */
-/*   [FocusIn] = focusin, */
-/*   [KeyPress] = keypress, */
-/*   [MappingNotify] = mappingnotify, */
-/*   [MapRequest] = maprequest, */
-/*   [MotionNotify] = motionnotify, */
-/*   [PropertyNotify] = propertynotify, */
-/*   [UnmapNotify] = unmapnotify */
-/* } */
-
-
-
-
+Display *display;
 Window root;
+Screen *scr;
+
+XEvent ev;
 
 
-typedef struct client{
-  Window w;
-  struct client *next;
-
-} Client ;
 
 
-int exists(Client c, Window wi) {
-  Client *next = c.next;
+/// We here define a 2d array
+// I hope nobody opens more than 255 windows in a tag, that'd buffer overflow
+// the system
+//this is the vital security flaw of this window manager
 
-  if (c.w == wi) return 1;
+Window clients[255][TOTAL_TAGS] = {0};
+unsigned int pertag_win[TOTAL_TAGS] = {0};
+float master_size[TOTAL_TAGS] = {DEFAULT_MASTER};
 
-  if (next == NULL) return 0;
+unsigned int working_tag = 0;
 
-  return exists(*next, wi);
-}
-
-
-int client_count(Client c) {
-  if (c.next == NULL){
-    return 1;
-  } else {
-    return 1 + client_count(*c.next);
+void remove_things(Window *array, unsigned int index, unsigned int upto) {
+  if (array[index] != 0) {
+    printf("there's probably a bug in the remove things function and you know why\n");
   }
-}
-
-int add_new_window(Client *cl, Window wi) {
-
-  Client *next = cl->next;
-
-  if (next != NULL) return add_new_window(next, wi);
-
-  Client *newc = malloc(sizeof(Client));
-
-  if (newc == NULL) return -1; // return null if malloc fails 
-  
-  newc->w = wi;
-
-  cl->next = newc;
-
-  return 0;
-}
-
-Client *c;
-
-
-Display* display;
-
-
-void frame(Window w, int already_here);
-
-void die(char *error_message) {
-  fprintf(stderr, "%s", error_message);
-  exit(-1);
-}
-
-int xerrorstart(Display *display, XErrorEvent* error) {
-  
-  die("dwm: another window manager is already running");
-  return -1;
-}
-
-
-int xerror(Display *display, XErrorEvent *ee) {
-
-  
-  if (ee->error_code == BadWindow
-      || (ee->request_code == X_SetInputFocus && ee->error_code == BadMatch)
-      || (ee->request_code == X_PolyText8 && ee->error_code == BadDrawable)
-      || (ee->request_code == X_PolyFillRectangle && ee->error_code == BadDrawable)
-      || (ee->request_code == X_PolySegment && ee->error_code == BadDrawable)
-      || (ee->request_code == X_ConfigureWindow && ee->error_code == BadMatch)
-      || (ee->request_code == X_GrabButton && ee->error_code == BadAccess)
-      || (ee->request_code == X_GrabKey && ee->error_code == BadAccess)
-      || (ee->request_code == X_CopyArea && ee->error_code == BadDrawable))
-    return 0;
-
-  fprintf(stderr, "dwm: fatal error: request code=%d, error code=%d\n",
-	  ee->request_code, ee->error_code);
-  
-  
-  return xerrorxlib(display, ee); /* may call exit */
-}
-
-
-
-
-void checkotherwm(void)
-{
-  xerrorxlib = XSetErrorHandler(xerrorstart);
-  /* this causes an error if some other window manager is running */
-  XSelectInput(display, DefaultRootWindow(display), SubstructureRedirectMask);
-  XSync(display, False);
-  XSetErrorHandler(xerror);
-  XSync(display, False);
-}
-
-
-void run() {
-  // grab the display connection
-  XGrabServer(display);
-
-  Window returned_root, returned_parent;
-  Window* top_level_windows;
-  unsigned int num_top_level_windows;
-
-  // If XQueryTree sucessfully runs, do the thing in the if block
-  if(XQueryTree(
-	     display,
-	     root,
-	     &returned_root,
-	     &returned_parent,
-	     &top_level_windows,
-	     &num_top_level_windows))
-    {
-
-      for (int i = 0 ; i < num_top_level_windows ; ++i) {
-
-	frame(top_level_windows[i], 1);
-	
-      }
-      
-    }
-
-
-
-
-
-  loop();
-
-  
-}
-
-
-
-
-
-void loop() {
-    // 2. Main event loop.
-  while (1) {
-    // 1. Get next event.
-    XEvent e;
-    XNextEvent(display, &e);
-
-    // 2. Dispatch event.
-    switch (e.type) {
-      case CreateNotify:
-        OnCreateNotify(&e);
-        break;
-      case DestroyNotify:
-        OnDestroyNotify(&e);
-        break;
-      case ReparentNotify:
-        OnReparentNotify(&e);
-        break;
-      case MapNotify:
-        OnMapNotify(&e);
-        break;
-      case UnmapNotify:
-        OnUnmapNotify(&e);
-        break;
-      case ConfigureNotify:
-        OnConfigureNotify(&e);
-        break;
-      case MapRequest:
-        OnMapRequest(&e);
-        break;
-      case ConfigureRequest:
-        OnConfigureRequest(&e);
-        break;
-      case ButtonPress:
-        OnButtonPress(&e);
-        break;
-      case ButtonRelease:
-        OnButtonRelease(&e);
-        break;
-      case MotionNotify:
-        // Skip any already pending motion events.
-        while (XCheckTypedWindowEvent(display, e.xmotion.window, MotionNotify, &e)) {}
-        OnMotionNotify(&e);
-        break;
-      case KeyPress:
-        OnKeyPress(&e);
-        break;
-      case KeyRelease:
-        OnKeyRelease(&e);
-        break;
-      default:
-	printf("Ignored XEvent\n");
-    }
-  }
-}
-
-
-// do nothing in the following cases
-void OnCreateNotify(XEvent *e) {}
-void OnDestroyNotify(XEvent *e) {}
-void OnReparentNotify(XEvent *e) {}
-void OnMapNotify(XEvent *e) {}
-void OnUnmapNotify(XEvent *e) {}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-void frame(Window w, int already_here) {
-
-  const unsigned int BORDER_WIDTH = 3;
-  const unsigned long BORDER_COLOR = 0xff0000;
-  const unsigned long BG_COLOR = 0x0000ff;
-
-  if (exists(*c, w) == 0) {
-    return ;
+  for (int i = index ; i < (upto - 1); i++) {
+    array[i] = array[i+1];
   }
 
-
-  XWindowAttributes x_window_attrs;
-  if (!XGetWindowAttributes(display, w, &x_window_attrs)) {
-    return;
-  }
+}
 
 
 
-  if (already_here == 1) {
-    if (x_window_attrs.override_redirect || x_window_attrs.map_state == IsViewable) {
+// the move front and move back functions cause bugs, probably because
+// I am bad at using loops properly
+
+void move_front(Window w, unsigned int wor_tag) {
+  // making a temporary window because we'll have to do some
+  // variable swapping
+  Window temp;
+  for (int i = 0; i < pertag_win[wor_tag] ; i++) {
+    if (clients[wor_tag][i] == w) {
+      temp = clients[wor_tag][i];
+
+      // not testig the edge case because it caused some bugs
+
+      /* if (i == 0) { // swapping first and last */
+      /* 	clients[wor_tag][i] = clients[wor_tag][pertag_win[wor_tag] - 1]; */
+      /* 	clients[wor_tag][pertag_win[wor_tag]] = temp; */
+      /* 	return; */
+      /* } */
+
+      // swapping the windiw and the window after it
+      clients[wor_tag][i] = clients[wor_tag][i-1];
+      clients[wor_tag][i-1] = temp;
       return;
     }
   }
-
-
-    // 3. Create frame.
-  Window frame = XCreateSimpleWindow(
-      display,
-      root,
-      x_window_attrs.x,
-      x_window_attrs.y,
-      x_window_attrs.width,
-      x_window_attrs.height,
-      BORDER_WIDTH,
-      BORDER_COLOR,
-      BG_COLOR);
-  // 4. Select events on frame.
-  XSelectInput(
-      display,
-      frame,
-      SubstructureRedirectMask | SubstructureNotifyMask);
-  // 5. Add client to save set, so that it will be restored and kept alive if we
-  // crash.
-  XAddToSaveSet(display, w);
-  // 6. Reparent client window.
-  XReparentWindow(
-      display,
-      w,
-      frame,
-      0, 0);  // Offset of client window within frame.
-  // 7. Map frame.
-  XMapWindow(display, frame);
-  // 8. Save frame handle.
-
-  add_new_window(c, frame);
-
-  add_keybindings(frame);
 }
 
 
-void add_keybindings(Window w) {
+void move_back(Window w, unsigned int wor_tag) {
+  // making a temporary window because we'll have to do some
+  // variable swapping
+  Window temp;
+  for (int i = 0; i < pertag_win[wor_tag] ; i++) {
+    if (clients[wor_tag][i] == w) {
+      temp = clients[wor_tag][i];
+      /* if (i == pertag_win[wor_tag]) { // swapping first and last */
+      /* 	clients[wor_tag][i] = clients[wor_tag][0]; */
+      /* 	clients[wor_tag][pertag_win[wor_tag]] = temp; */
+      /* 	return; */
+      /* } */
+
+      // swapping the window and the window before it
+      clients[wor_tag][i] = clients[wor_tag][i+1];
+      clients[wor_tag][i+1] = temp;
+      return;
+    }
+  }
+}
 
 
-  XGrabButton(
-      display,
-      Button1,
-      Mod1Mask,
-      w,
-      0,
-      ButtonPressMask | ButtonReleaseMask | ButtonMotionMask,
-      GrabModeAsync,
-      GrabModeAsync,
-      None,
-      None);
-  //   b. Resize windows with alt + right button.
-  XGrabButton(
-      display,
-      Button3,
-      Mod1Mask,
-      w,
-      0,
-      ButtonPressMask | ButtonReleaseMask | ButtonMotionMask,
-      GrabModeAsync,
-      GrabModeAsync,
-      None,
-      None);
-  //   c. Kill windows with alt + f4.
-  XGrabKey(
-      display,
-      XKeysymToKeycode(display, XK_F4),
-      Mod1Mask,
-      w,
-      0,
-      GrabModeAsync,
-      GrabModeAsync);
-  //   d. Switch windows with alt + tab.
-  XGrabKey(
-      display,
-      XKeysymToKeycode(display, XK_Tab),
-      Mod1Mask,
-      w,
-      0,
-      GrabModeAsync,
-      GrabModeAsync);
 
+int remove_window(Window w, unsigned int wor_tag) {
+  for (int i = 0; i < pertag_win[wor_tag] ; i++) {
+    if (clients[wor_tag][i] == w) {
+      clients[wor_tag][i] = 0;
+      remove_things(clients[wor_tag], i, pertag_win[wor_tag]);
+      pertag_win[wor_tag] -= 1;
+      return 0;
+    }
+  }
+  return 1;
+}
+
+
+int remove_all_instance_of_window(Window w) {
+  int retvalue;
+  for (int i = 0; i < TOTAL_TAGS ; i++) {
+    retvalue = remove_window(w, i);
+  }
+
+  return retvalue;
+}
+
+void add_window_to_list(Window w) {
+
+  // go to the working tag, go to the last window and add
+
+  for (int i = 0; i < pertag_win[working_tag]; i++) {
+    if (clients[working_tag][i] == w) {
+      return; // we don't need to anything here now ;
+    }
+  }
+  
+  clients[working_tag][pertag_win[working_tag]] = w;
+
+  printf("Adding a window to the tag\n");
+  pertag_win[working_tag] += 1; // another window added to the tag
+
+}
+
+void die(char *str) {
+  fprintf(stderr, "%s", str);
+  exit(0);
+}
+
+void unmap_all_tag(unsigned int tag) {
+  for (int i = 0 ; i < pertag_win[tag]; i++) {
+    XUnmapWindow(display, clients[tag][i]);
+  }
+}
+
+void unmap_all() {
+  for (int i = 0; i < TOTAL_TAGS ; i++) {
+    unmap_all_tag(i);
+  }
+}
+
+
+void manage() {
+  float master = master_size[working_tag];
+  float slave = 1 - master;
+
+  int height = scr->height;
+  int width = scr->width;
+
+  unsigned int total_windows_in_this_tag = pertag_win[working_tag];
+  unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
+
+
+  printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
+  
+  for (int i = 0; i < pertag_win[working_tag] ; i++) {
+    Window working = clients[working_tag][i]; // get the window to map
+
+    printf("managing window %lu, INDEX: %i\n", working, i);
+
+    XWindowAttributes atter;
+    XGetWindowAttributes(display, working, &atter);
+    XMapWindow(display, working);
+    
+    if (i == 0) { // this means it is the master window
+      printf("window %lu is a master\n" , working );
+
+      if (total_windows_in_this_tag == 1) { // take the full size if it is the only window
+	XResizeWindow(display, working, width , height);
+      } else {
+	XResizeWindow(display, working, width * master, height);
+      }
+      // moving the window to the place of the master
+      XMoveWindow(display, working, 0, 0); 
+      
+    } else { // this means it is the stack window
+      printf("window %lu is a slave\n" , working );
+      int slave_height = height / total_stacks_in_this_tag;
+      XResizeWindow(display, working, width * slave , slave_height);
+
+      int xpos = width * master;
+      int ypos = slave_height * (i - 1) ;
+
+      printf("the position is (%i, %i)\n", xpos, ypos);
+      
+      XMoveWindow(display, working, width * master, ypos);
+    }
+  }
+}
+
+
+
+
+
+int wmerror(Display *display, XErrorEvent *ev) {
+  die("another wm is already here\n");
+  return -1;
+}
+
+int error(Display *display, XErrorEvent *ev) {
+  char code  = ev->error_code;
+  printf("error recived, CODE: %i\n", code);
+  return -1;
+}
+
+int checkotherwm(Display *display, Window root) {
+  XSetErrorHandler(wmerror);
+  XSelectInput(display, root, SubstructureRedirectMask | SubstructureNotifyMask);
+  XSync(display, False);
+  XSetErrorHandler(error);
+  XSync(display, False);
+  printf("\nDid not find another wm, Starting....\n");
+  return 0;
+}
+
+void configureevent(const  XConfigureRequestEvent e) {
+  XWindowChanges changes;
+  changes.x = e.x;
+  changes.y = e.y;
+  changes.width = e.width;
+  changes.height = e.height;
+  changes.border_width = e.border_width;
+  changes.sibling = e.above;
+  changes.stack_mode = e.detail;
+
+  XConfigureWindow(display, e.window, e.value_mask, &changes);
+
+  manage();
+}
+
+void mapevent(const XMapRequestEvent e) {
+  Window w = e.window;
+
+  printf("Map event came from window %lu\n", w);
+
+  if (e.parent == root) {
+    add_window_to_list(w);
+  }
+  manage();
+}
+
+
+void destroynotify(const XDestroyWindowEvent e) {
+  Window w = e.window;
+  printf("destroy Window %lu\n", w);
+  remove_all_instance_of_window(w);
+  manage();
+}
+
+
+void masterchange(int inc) { // if it is 1, it will increase
+  // the user must make sure that this value never reaches below 0 or above 1
+  // I am too lazy to code it up right now
+  if (inc) {
+    master_size[working_tag] += 0.05;
+  } else {
+    master_size[working_tag] -= 0.05;
+  } 
+}
+
+
+
+// I wrote this macro because typing this out everytime while defining a key was
+// a fucking chore
+// I want this Macro to be used only in the keypress function.
+// I can't gaurrentie it will work anywhere outside this function
+// Dont bring in bugs
+
+#define ISKEY(K) e.keycode == XKeysymToKeycode(display, XStringToKeysym(K))
+#define GOTOTAG(T) unmap_all() ; working_tag = T ; manage();
+
+
+void keypress(const XKeyEvent e) {
+  printf("keypresss request seen\n");
+
+  /* if (e.state & Mod1Mask && */
+
+  // shit this code is ugly as fuck
+  
+  if (e.state & Mod1Mask) {
+    if (ISKEY("Q")) {
+      Window focused = e.subwindow;
+      printf("the focused widow is %lu\n", focused);
+      XKillClient(display, focused); // Kill the window
+      printf("Killed the focuse window %lu\n", focused);
+    } else if (ISKEY("D")) {
+      printf("opening up dmenu\n");
+      system("dmenu_run");
+    } else if (ISKEY("M")) {
+      printf("manually running the manage() function\n");
+      manage();
+    } else if (ISKEY("J")) {
+      masterchange(0);
+      manage();
+    } else if (ISKEY("K")) {
+      masterchange(1);
+      manage();
+    } else if (ISKEY("1")) {
+      GOTOTAG(0);
+    } else if (ISKEY("2")) {
+      GOTOTAG(1);
+    } else if (ISKEY("3")) {
+      GOTOTAG(2);
+    } else if (ISKEY("H")) {
+      move_front(e.subwindow, working_tag);
+      manage();
+    } else if (ISKEY("L")) {
+      move_back(e.subwindow, working_tag);
+      manage();
+    }
+    
+  }
+}
+
+
+int handle_events(XEvent ev) {
+
+  switch (ev.type) {
+  case ConfigureRequest:
+    configureevent(ev.xconfigurerequest);
+    break;
+  case MapRequest:
+    mapevent(ev.xmaprequest);
+    break;
+  case DestroyNotify:
+    destroynotify(ev.xdestroywindow);
+    break;
+  case KeyPress:
+    keypress(ev.xkey);
+    break;
+  }
+
+  XSync(display, False);
+  return 0;
+};
+
+
+// How these keys work are defined in the function keypress, remember, alt key is the modifier key
+#define MOD1BIND(K) XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym(K)), Mod1Mask, root, True, GrabModeAsync, GrabModeAsync)
+void setkeys() {
+  // for killing windows
+  MOD1BIND("Q");
+  // for opening up dmenu
+  MOD1BIND("D");
+  // for running the manage function when there are some bugs
+  MOD1BIND("M");
+  // dicrease the size of the master
+  MOD1BIND("J");
+  // increase the size of the master
+  MOD1BIND("K");
+  // move to tags
+  MOD1BIND("1");
+  MOD1BIND("2");
+  MOD1BIND("3");
+  // move wndow front and back
+  MOD1BIND("H");
+  MOD1BIND("L");
 }
 
 
 int main() {
-  display =  XOpenDisplay(NULL);
 
-  
-  if (display == NULL) {
-    printf("Failled to open display\n");
-  } else {
-    printf("Sucessfully opened display\n");
-  }
-
-  checkotherwm();
+  display = XOpenDisplay(NULL);
 
   root = DefaultRootWindow(display);
 
+  scr = DefaultScreenOfDisplay(display);
 
-  run();
-  
-  
-  printf("Closing the display\n");
-  int value = XCloseDisplay(display);
+  if (!display) {
+    die("The display is not ready\n");
+  } else {
+    printf("Sucess getting the display\n");
+  }
 
-  printf("the return int was %i\n", value);
+  printf("Gonna check if another window exists");
   
+  checkotherwm(display, root);
+
+  printf("setting the keybindings\n");
+
+  setkeys();
+  
+  printf("Entering the main While loop\n");
+
+  
+  while (1) {
+    XNextEvent(display, &ev);
+    handle_events(ev);
+  }
+
+
+  return 0;
 }
