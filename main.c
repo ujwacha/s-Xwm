@@ -23,7 +23,18 @@ XEvent ev;
 
 Window clients[255][TOTAL_TAGS] = {0};
 unsigned int pertag_win[TOTAL_TAGS] = {0};
-float master_size[TOTAL_TAGS] = {DEFAULT_MASTER};
+float master_size[TOTAL_TAGS] = {
+    DEFAULT_MASTER,
+    DEFAULT_MASTER,
+    DEFAULT_MASTER,
+    DEFAULT_MASTER,
+    DEFAULT_MASTER,
+    DEFAULT_MASTER,
+    DEFAULT_MASTER,
+    DEFAULT_MASTER,
+    DEFAULT_MASTER,
+    DEFAULT_MASTER,
+    };
 
 unsigned int working_tag = 0;
 
@@ -147,9 +158,11 @@ void unmap_all() {
 }
 
 
-void manage() {
+void manage(unsigned int working_tag) {
   float master = master_size[working_tag];
-  float slave = 1 - master;
+  float slave = 1.0 - master;
+
+  printf("the master size is %f\n", master);
 
   int height = scr->height;
   int width = scr->width;
@@ -183,6 +196,9 @@ void manage() {
     } else { // this means it is the stack window
       printf("window %lu is a slave\n" , working );
       int slave_height = height / total_stacks_in_this_tag;
+
+      printf("HEIGHT: %i, WIDTH: %i\n", slave_height, (int) (width * slave));
+
       XResizeWindow(display, working, width * slave , slave_height);
 
       int xpos = width * master;
@@ -232,7 +248,7 @@ void configureevent(const  XConfigureRequestEvent e) {
 
   XConfigureWindow(display, e.window, e.value_mask, &changes);
 
-  manage();
+  manage(working_tag);
 }
 
 void mapevent(const XMapRequestEvent e) {
@@ -243,7 +259,7 @@ void mapevent(const XMapRequestEvent e) {
   if (e.parent == root) {
     add_window_to_list(w);
   }
-  manage();
+  manage(working_tag);
 }
 
 
@@ -251,7 +267,7 @@ void destroynotify(const XDestroyWindowEvent e) {
   Window w = e.window;
   printf("destroy Window %lu\n", w);
   remove_all_instance_of_window(w);
-  manage();
+  manage(working_tag);
 }
 
 
@@ -274,7 +290,7 @@ void masterchange(int inc) { // if it is 1, it will increase
 // Dont bring in bugs
 
 #define ISKEY(K) e.keycode == XKeysymToKeycode(display, XStringToKeysym(K))
-#define GOTOTAG(T) unmap_all() ; working_tag = T ; manage();
+#define GOTOTAG(T)  unmap_all(); working_tag = T ; manage(working_tag); 
 
 
 void keypress(const XKeyEvent e) {
@@ -295,25 +311,28 @@ void keypress(const XKeyEvent e) {
       system("dmenu_run");
     } else if (ISKEY("M")) {
       printf("manually running the manage() function\n");
-      manage();
+      manage(working_tag);
     } else if (ISKEY("J")) {
       masterchange(0);
-      manage();
+      manage(working_tag);
     } else if (ISKEY("K")) {
       masterchange(1);
-      manage();
+      manage(working_tag);
     } else if (ISKEY("1")) {
       GOTOTAG(0);
     } else if (ISKEY("2")) {
       GOTOTAG(1);
+      printf("Workspace 2 is set");
     } else if (ISKEY("3")) {
       GOTOTAG(2);
     } else if (ISKEY("H")) {
       move_front(e.subwindow, working_tag);
-      manage();
+      manage(working_tag);
     } else if (ISKEY("L")) {
       move_back(e.subwindow, working_tag);
-      manage();
+      manage(working_tag);
+    } else if (ISKEY("T")) {
+      system("xterm");
     }
     
   }
@@ -362,6 +381,8 @@ void setkeys() {
   // move wndow front and back
   MOD1BIND("H");
   MOD1BIND("L");
+  // for opening up the terminal
+  MOD1BIND("T");
 }
 
 
