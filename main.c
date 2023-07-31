@@ -63,11 +63,12 @@ void move_front(Window w, unsigned int wor_tag) {
 
       // not testig the edge case because it caused some bugs
 
-      /* if (i == 0) { // swapping first and last */
-      /* 	clients[wor_tag][i] = clients[wor_tag][pertag_win[wor_tag] - 1]; */
-      /* 	clients[wor_tag][pertag_win[wor_tag]] = temp; */
-      /* 	return; */
-      /* } */
+      if (i == 0) { // swapping first and last
+	//	clients[wor_tag][i] = clients[wor_tag][pertag_win[wor_tag] - 1];
+	//clients[wor_tag][pertag_win[wor_tag]] = temp;
+	printf("begining of the thing, not moving\n");
+	return;
+      }
 
       // swapping the windiw and the window after it
       clients[wor_tag][i] = clients[wor_tag][i-1];
@@ -85,11 +86,13 @@ void move_back(Window w, unsigned int wor_tag) {
   for (int i = 0; i < pertag_win[wor_tag] ; i++) {
     if (clients[wor_tag][i] == w) {
       temp = clients[wor_tag][i];
-      /* if (i == pertag_win[wor_tag]) { // swapping first and last */
-      /* 	clients[wor_tag][i] = clients[wor_tag][0]; */
-      /* 	clients[wor_tag][pertag_win[wor_tag]] = temp; */
-      /* 	return; */
-      /* } */
+      if (i == (pertag_win[wor_tag] - 1)) { // swapping first and last
+	//	clients[wor_tag][i] = clients[wor_tag][0];
+	//clients[wor_tag][pertag_win[wor_tag]] = temp;
+	printf("end of the thing, not moving\n");
+	return;
+	
+      }
 
       // swapping the window and the window before it
       clients[wor_tag][i] = clients[wor_tag][i+1];
@@ -283,6 +286,29 @@ void masterchange(int inc) { // if it is 1, it will increase
 
 
 
+void copy_window_to_next_tag(Window w) {
+
+  // get the next tag
+  unsigned int next_tag = (working_tag + 1) % TOTAL_TAGS;
+
+  //  add the winodw to the next tag
+
+  for (int i = 0 ; i < pertag_win[next_tag] ; i++) {
+    if (w == clients[next_tag][i]) return;
+  }
+
+  clients[next_tag][pertag_win[next_tag]] = w;
+
+  // increment the number of windows in the next tag
+
+  pertag_win[next_tag] += 1;
+}
+
+void move_window_to_next_tag(Window w) {
+  copy_window_to_next_tag(w);
+  remove_window(w, working_tag);
+}
+
 // I wrote this macro because typing this out everytime while defining a key was
 // a fucking chore
 // I want this Macro to be used only in the keypress function.
@@ -290,7 +316,7 @@ void masterchange(int inc) { // if it is 1, it will increase
 // Dont bring in bugs
 
 #define ISKEY(K) e.keycode == XKeysymToKeycode(display, XStringToKeysym(K))
-#define GOTOTAG(T)  unmap_all(); working_tag = T ; manage(working_tag); 
+#define GOTOTAG(T)  unmap_all(); working_tag = T ; manage(working_tag);
 
 
 void keypress(const XKeyEvent e) {
@@ -308,7 +334,7 @@ void keypress(const XKeyEvent e) {
       printf("Killed the focuse window %lu\n", focused);
     } else if (ISKEY("D")) {
       printf("opening up dmenu\n");
-      system("dmenu_run");
+      system("dmenu_run&");
     } else if (ISKEY("M")) {
       printf("manually running the manage() function\n");
       manage(working_tag);
@@ -325,6 +351,20 @@ void keypress(const XKeyEvent e) {
       printf("Workspace 2 is set");
     } else if (ISKEY("3")) {
       GOTOTAG(2);
+    } else if (ISKEY("4")) {
+      GOTOTAG(3);
+    } else if (ISKEY("5")) {
+      GOTOTAG(4);
+    } else if (ISKEY("6")) {
+      GOTOTAG(5);
+    } else if (ISKEY("7")) {
+      GOTOTAG(6);
+    } else if (ISKEY("8")) {
+      GOTOTAG(7);
+    } else if (ISKEY("9")) {
+      GOTOTAG(8);
+    } else if (ISKEY("0")) {
+      GOTOTAG(9);
     } else if (ISKEY("H")) {
       move_front(e.subwindow, working_tag);
       manage(working_tag);
@@ -332,9 +372,32 @@ void keypress(const XKeyEvent e) {
       move_back(e.subwindow, working_tag);
       manage(working_tag);
     } else if (ISKEY("T")) {
-      system("xterm");
+      system("st&");
+    } else if (ISKEY("C")) {
+      exit(0);
+    } else if (ISKEY("O")) {
+      printf("O key pressed\n");
+      if (working_tag == 0) {
+	working_tag = TOTAL_TAGS - 1;
+      } else {
+	working_tag = working_tag - 1;
+      }
+      GOTOTAG(working_tag);
+    } else if (ISKEY("P")) {
+      printf("P key pressed\n");
+      working_tag = (working_tag + 1) % TOTAL_TAGS;
+      GOTOTAG(working_tag);
+    } else if (ISKEY("Return")) {
+      system("st&");
+    } else if (ISKEY("Y")) {
+      Window focused = e.subwindow;
+      copy_window_to_next_tag(focused);
+    } else if (ISKEY("I")) {
+      Window focused = e.subwindow;
+      move_window_to_next_tag(focused);
+      unmap_all();
+      manage(working_tag);
     }
-    
   }
 }
 
@@ -378,11 +441,31 @@ void setkeys() {
   MOD1BIND("1");
   MOD1BIND("2");
   MOD1BIND("3");
+  MOD1BIND("4");
+  MOD1BIND("5");
+  MOD1BIND("6");
+  MOD1BIND("7");
+  MOD1BIND("8");
+  MOD1BIND("9");
   // move wndow front and back
   MOD1BIND("H");
   MOD1BIND("L");
   // for opening up the terminal
   MOD1BIND("T");
+  // for exiting the wm
+  MOD1BIND("C");
+
+  // add workspace
+  MOD1BIND("O");
+  // subtract workspace
+  MOD1BIND("P");
+
+  // Launch Terminal
+  MOD1BIND("Return");
+  // Make a copy of the window in the next tag 
+  MOD1BIND("Y");
+  // Move to the next tag the winodw
+  MOD1BIND("I");
 }
 
 
@@ -418,4 +501,4 @@ int main() {
 
 
   return 0;
-}
+} // 469 Nice
