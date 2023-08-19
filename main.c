@@ -13,7 +13,9 @@ Screen *scr;
 
 XEvent ev;
 
-
+unsigned long unfocused_border_pixel = 0x0000FF;
+unsigned long focused_border_pixel   =  0xFF0000;
+int boarder_width = 2;
 
 
 /// We here define a 2d array
@@ -37,6 +39,8 @@ float master_size[TOTAL_TAGS] = {
     };
 
 unsigned int working_tag = 0;
+Window focused;
+Window preFocused;
 
 void remove_things(Window *array, unsigned int index, unsigned int upto) {
   if (array[index] != 0) {
@@ -48,7 +52,23 @@ void remove_things(Window *array, unsigned int index, unsigned int upto) {
 
 }
 
+void update_focused() {
+  Window foc;
+  int revert_to;
+  XGetInputFocus(display, &foc, &revert_to);
 
+  // get the focused window first in dummy variable foc and then set
+  // focused to foc so that the code is more readable
+  
+  focused = foc;
+
+  // change the background colour of focuse window
+  XSetWindowBorder(display, focused, focused_border_pixel );
+
+  // change the background of previously focused window
+
+  XSetWindowBorder(display, preFocused, unfocused_border_pixel);
+}
 
 // the move front and move back functions cause bugs, probably because
 // I am bad at using loops properly
@@ -105,6 +125,7 @@ void move_back(Window w, unsigned int wor_tag) {
 
 
 int remove_window(Window w, unsigned int wor_tag) {
+  // search for a window in a tag and remove the window
   for (int i = 0; i < pertag_win[wor_tag] ; i++) {
     if (clients[wor_tag][i] == w) {
       clients[wor_tag][i] = 0;
@@ -178,12 +199,21 @@ void manage(unsigned int working_tag) {
   
   for (int i = 0; i < pertag_win[working_tag] ; i++) {
     Window working = clients[working_tag][i]; // get the window to map
+    XSetWindowBorderWidth(display, working, boarder_width);
 
     printf("managing window %lu, INDEX: %i\n", working, i);
 
     XWindowAttributes atter;
     XGetWindowAttributes(display, working, &atter);
     XMapWindow(display, working);
+
+    if (working == focused) {
+      // background colour of focuse window
+      XSetWindowBorder(display, focused, focused_border_pixel );
+    } else {
+      // background colour of unfocusedwindow
+      //XSetWindowBorder(display, preFocused, unfocused_border_pixel);     
+    }
     
     if (i == 0) { // this means it is the master window
       printf("window %lu is a master\n" , working );
@@ -397,10 +427,16 @@ void keypress(const XKeyEvent e) {
       move_window_to_next_tag(focused);
       unmap_all();
       manage(working_tag);
+    } else if (ISKEY("W")) {
+      system("firefox &");
     }
   }
 }
 
+
+/* void update_focused_ev(XFocusChangeEvent f) { */
+/*   Window foc = f.window; */
+/* } */
 
 int handle_events(XEvent ev) {
 
@@ -416,6 +452,17 @@ int handle_events(XEvent ev) {
     break;
   case KeyPress:
     keypress(ev.xkey);
+    break;
+  case FocusIn:
+    printf("focusin event just came, 0x%lx gained focus \n\n\n", ev.xfocus.window);
+    update_focused();
+    break;
+  case EnterNotify:
+    printf("Entered");
+    Window entered =  ev.xcrossing.window;
+    if (entered != focused) {
+      XSetInputFocus(display, entered, RevertToParent, CurrentTime);
+    }
     break;
   }
 
@@ -466,6 +513,8 @@ void setkeys() {
   MOD1BIND("Y");
   // Move to the next tag the winodw
   MOD1BIND("I");
+  ///
+  MOD1BIND("W");
 }
 
 
