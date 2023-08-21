@@ -1,7 +1,12 @@
 #include <X11/X.h>
 #include <X11/Xlib.h>
+#include <bits/pthreadtypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <X11/Xutil.h>
+#include <unistd.h>
+#include <pthread.h>
 
 
 #define TOTAL_TAGS 10
@@ -11,12 +16,12 @@ Display *display;
 Window root;
 Screen *scr;
 
+int barheight = 19;
+Window barwin;
+
 XEvent ev;
-
-unsigned long unfocused_border_pixel = 0x0000FF;
-unsigned long focused_border_pixel   =  0xFF0000;
-int boarder_width = 2;
-
+unsigned long border_pixel = 20;
+char buffer[1024]; // 1kb buffer for doing stuff later
 
 /// We here define a 2d array
 // I hope nobody opens more than 255 windows in a tag, that'd buffer overflow
@@ -29,8 +34,7 @@ float master_size[TOTAL_TAGS] = {
     DEFAULT_MASTER,
     DEFAULT_MASTER,
     DEFAULT_MASTER,
-    DEFAULT_MASTER,
-    DEFAULT_MASTER,
+    DEFAULT_MASTER, DEFAULT_MASTER,
     DEFAULT_MASTER,
     DEFAULT_MASTER,
     DEFAULT_MASTER,
@@ -52,23 +56,7 @@ void remove_things(Window *array, unsigned int index, unsigned int upto) {
 
 }
 
-void update_focused() {
-  Window foc;
-  int revert_to;
-  XGetInputFocus(display, &foc, &revert_to);
 
-  // get the focused window first in dummy variable foc and then set
-  // focused to foc so that the code is more readable
-  
-  focused = foc;
-
-  // change the background colour of focuse window
-  XSetWindowBorder(display, focused, focused_border_pixel );
-
-  // change the background of previously focused window
-
-  XSetWindowBorder(display, preFocused, unfocused_border_pixel);
-}
 
 // the move front and move back functions cause bugs, probably because
 // I am bad at using loops properly
@@ -182,6 +170,8 @@ void unmap_all() {
 }
 
 
+
+
 void manage(unsigned int working_tag) {
   float master = master_size[working_tag];
   float slave = 1.0 - master;
@@ -191,6 +181,7 @@ void manage(unsigned int working_tag) {
   int height = scr->height;
   int width = scr->width;
 
+  height -= barheight;
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
   unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
 
@@ -199,7 +190,11 @@ void manage(unsigned int working_tag) {
   
   for (int i = 0; i < pertag_win[working_tag] ; i++) {
     Window working = clients[working_tag][i]; // get the window to map
-    XSetWindowBorderWidth(display, working, boarder_width);
+
+
+
+
+    XSetWindowBorder(display, working, border_pixel);
 
     printf("managing window %lu, INDEX: %i\n", working, i);
 
@@ -207,13 +202,6 @@ void manage(unsigned int working_tag) {
     XGetWindowAttributes(display, working, &atter);
     XMapWindow(display, working);
 
-    if (working == focused) {
-      // background colour of focuse window
-      XSetWindowBorder(display, focused, focused_border_pixel );
-    } else {
-      // background colour of unfocusedwindow
-      //XSetWindowBorder(display, preFocused, unfocused_border_pixel);     
-    }
     
     if (i == 0) { // this means it is the master window
       printf("window %lu is a master\n" , working );
@@ -360,6 +348,7 @@ void keypress(const XKeyEvent e) {
     if (ISKEY("Q")) {
       Window focused = e.subwindow;
       printf("the focused widow is %lu\n", focused);
+      if (focused == barwin) { printf("Cant kill Bar Window\n"); return; }
       XKillClient(display, focused); // Kill the window
       printf("Killed the focuse window %lu\n", focused);
     } else if (ISKEY("D")) {
@@ -455,7 +444,6 @@ int handle_events(XEvent ev) {
     break;
   case FocusIn:
     printf("focusin event just came, 0x%lx gained focus \n\n\n", ev.xfocus.window);
-    update_focused();
     break;
   case EnterNotify:
     printf("Entered");
@@ -518,6 +506,48 @@ void setkeys() {
 }
 
 
+Window runbar() {
+  Screen screen = *scr;
+  Display *dpy = display;
+  int win_height = barheight;
+  XEvent e;
+
+
+  Window win = XCreateSimpleWindow(dpy, root, 0, 0, scr->width, win_height, 1,
+				   BlackPixel(display, DefaultScreen(display)),
+				   WhitePixel(display, DefaultScreen(display)));
+
+  
+
+  XMoveWindow(dpy, win, 0, scr->height - win_height);
+
+  XMapWindow(dpy, win);
+  return win;
+}
+
+
+
+void *update_bar() {
+  FILE *fp;
+  char tempbu[1024];
+  while (1) {
+    usleep(100); // sleep for 100 microseconds to let the processor work on other stuff
+    fp = fopen("/tmp/sxwm_title", "r");
+    if (fp == NULL) {
+      continue;  // if the file does not exist, do nothing
+    }
+    fgets(tempbu, 1000, fp);
+    //    printf("temp: %s\nbuf:%s\n", tempbu, buffer );
+    if (strcmp(tempbu, buffer)) {
+      strcpy(buffer, tempbu);
+      XClearWindow(display, barwin);
+    }
+    XDrawString(display, barwin, DefaultGC(display, DefaultScreen(display)), 10, 10, buffer, strlen(buffer));
+    fclose(fp);
+  }
+}
+
+
 int main() {
 
   display = XOpenDisplay(NULL);
@@ -531,6 +561,14 @@ int main() {
   } else {
     printf("Sucess getting the display\n");
   }
+
+  barwin = runbar();
+
+  pthread_t thread;
+
+  pthread_create(&thread, NULL, update_bar, NULL);
+  
+  printf("bar window is %lu\n", barwin);
 
   printf("Gonna check if another window exists");
   
@@ -548,6 +586,7 @@ int main() {
     handle_events(ev);
   }
 
-
+  pthread_join(thread, NULL);
+  
   return 0;
 } // 469 Nice
