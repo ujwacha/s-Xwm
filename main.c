@@ -49,8 +49,8 @@ Window focused;
 
 int layout_no = 0;
 
-#define TOTALKEYS 26
-char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B"};
+#define TOTALKEYS 27
+char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B","A"};
 
 void read_config()
 {
@@ -395,6 +395,112 @@ void manage_tree(unsigned int working_tag)
   }
 }
 
+void manage_centered_master(unsigned int working_tag)
+{
+  float master = master_size[working_tag];
+  float slave = 1.0 - master;
+
+  struct winInfo{//for storing windows dimension and position
+    unsigned int winW;
+    unsigned int winH;
+    unsigned int xpos;
+    unsigned int ypos;
+  };
+  printf("the master size is %f\n", master);
+
+  int height = scr->height - barheight;
+  int width = scr->width;
+
+  unsigned int total_windows_in_this_tag = pertag_win[working_tag];
+  unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
+
+  unsigned int divider = total_stacks_in_this_tag;
+
+  printf("\n%i\n",divider);
+
+  printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
+
+  struct winInfo w[total_windows_in_this_tag];//stores the dimension and position of windows in tag
+
+
+  if(total_windows_in_this_tag==1)
+  {
+    w[0].winH = height;
+    w[0].winW = width;
+    w[0].xpos = 0;
+    w[0].ypos = 0;
+  }
+
+  else if(total_windows_in_this_tag==2)
+  {
+    w[0].winH = height;
+    w[0].winW = width*0.6;
+    w[0].xpos = 0;
+    w[0].ypos = 0;
+
+    w[1].winH = height;
+    w[1].winW = width-w[0].winW;
+    w[1].xpos = w[0].winW;
+    w[1].ypos = 0;
+  }
+
+  else
+  {
+    w[0].winH = height;
+    w[0].winW = width*0.5;
+    w[0].xpos = width*0.25;
+    w[0].ypos = 0;
+
+    for(int i=total_stacks_in_this_tag;i>0;i--)
+    {
+      if(i%2!=0)
+      {
+        w[i].winW = width*0.25;
+        w[i].winH = (height) /((total_stacks_in_this_tag+1)/2);
+        w[i].xpos = width*0.75;
+        w[i].ypos = ((height)/((total_stacks_in_this_tag+1)/2))*((i-1)/2);
+      }
+
+      else
+      {
+        w[i].winW = width*0.25;
+        w[i].winH = (height) /(total_stacks_in_this_tag/2);
+        w[i].xpos = 0;
+        w[i].ypos = ((height) /(total_stacks_in_this_tag/2))*((i-2)/2);
+      }
+    }
+  }
+
+  for (int i = 0; i < pertag_win[working_tag] ; i++) {
+    Window working = clients[working_tag][i]; // get the window to map
+
+    printf("managing window %lu, INDEX: %i\n", working, i);
+
+    XWindowAttributes atter;
+    XGetWindowAttributes(display, working, &atter);
+    XMapWindow(display, working);
+
+    if(i==0)
+    {
+      printf("window %lu is a master\n",working);
+    }
+    else
+    {
+      printf("window %lu is a stack \n",working);
+    }
+
+    XResizeWindow(display,working,w[i].winW,w[i].winH);
+    XMoveWindow(display,working,w[i].xpos,w[i].ypos);
+
+    printf("for index %d: \n",i);
+
+    printf("width: %u \n",w[i].winW);
+    printf("height: %u \n",w[i].winH);
+    printf("x-position: %u \n",w[i].xpos);
+    printf("y-position: %u \n",w[i].ypos);
+  } 
+}
+
 void manage(unsigned int working_tag)
 {
   switch (layout_no)
@@ -405,6 +511,11 @@ void manage(unsigned int working_tag)
   case 1:
     manage_tree(working_tag);
     break;
+
+  case 2:
+    manage_centered_master(working_tag);
+    break;
+  
   default:
     manage_master_stack(working_tag);
   }
@@ -669,6 +780,12 @@ void keypress(const XKeyEvent e)
       layout_no = 0;
       manage(working_tag);
     }
+    else if (ISKEY(keyBindings[26]))
+    {
+      layout_no = 2;
+      manage(working_tag);
+    }
+    
   }
 }
 
