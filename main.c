@@ -21,7 +21,7 @@ int border_width = 2;
 Window barwin;
 
 XEvent ev;
-unsigned long border_pixel = 15;
+unsigned long border_pixel = 8;
 char buffer[1024]; // 1kb buffer for doing stuff later
 
 /// We here define a 2d array
@@ -224,6 +224,33 @@ void unmap_all()
   }
 }
 
+// Maps the window with adjusted spacing between windows.
+void plot(Window window, int posx, int posy, int width, int height)
+{
+  // position of opposite pixel of window
+  int oposx = posx + width;
+  int oposy = posy + height;
+  posx += border_pixel;
+  posy += border_pixel;
+  width -= (2 * border_pixel);
+  height - +(2 * border_pixel);
+  if (posx == 0)
+  {
+    posx += border_pixel;
+    width -= border_pixel;
+  }
+  if (posy == 0)
+  {
+    posy += border_pixel;
+    height -= border_pixel;
+  }
+  if (oposx > scr->width - 5 && oposx < scr->width + 5)
+    width -= border_pixel;
+  if (oposy > scr->height - 5 && oposx < scr->height + 5)
+    height -= border_pixel;
+  XMoveResizeWindow(display, window, posx, posy, width, height);
+}
+
 void manage_master_stack(unsigned int working_tag)
 {
   float master = master_size[working_tag];
@@ -233,6 +260,10 @@ void manage_master_stack(unsigned int working_tag)
 
   int height = scr->height;
   int width = scr->width;
+
+  // width and height of window.
+  int winwidth;
+  int winheight;
 
   height -= barheight;
   height -= bargap;
@@ -279,29 +310,30 @@ void manage_master_stack(unsigned int working_tag)
 
       if (total_windows_in_this_tag == 1)
       { // take the full size if it is the only window
-        XResizeWindow(display, working, width - 2 * border_pixel, height - 2 * border_pixel);
+        winwidth = width;
+        winheight = height;
       }
       else
       {
-        XResizeWindow(display, working, width * master - 1.5 * border_pixel, height - 2 * border_pixel);
+        winwidth = width * master;
+        winheight = height;
       }
       // moving the window to the place of the master
-      XMoveWindow(display, working, 0 + border_pixel, 0 + border_pixel);
+      plot(working, 0, 0, winwidth, winheight);
     }
     else
     { // this means it is the stack window
       printf("window %lu is a slave\n", working);
-      int slave_height = (height - (total_stacks_in_this_tag + 1) * border_pixel) / total_stacks_in_this_tag;
+      winheight = height / total_stacks_in_this_tag;
+      winwidth = width * slave;
+      printf("HEIGHT: %i, WIDTH: %i\n", winheight, winwidth);
 
-      printf("HEIGHT: %i, WIDTH: %i\n", slave_height, (int)(width * slave));
-
-      XResizeWindow(display, working, width * slave - 1.5 * border_pixel, slave_height);
-      int xpos = width * master + 0.5 * border_pixel;
-      int ypos = slave_height * (i - 1) + i * border_pixel;
+      int xpos = width * master;
+      int ypos = winheight * (i - 1);
 
       printf("the position is (%i, %i)\n", xpos, ypos);
 
-      XMoveWindow(display, working, xpos, ypos);
+      plot(working, xpos, ypos, winwidth, winheight);
     }
   }
 }
