@@ -327,6 +327,14 @@ void manage_tree(unsigned int working_tag)
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
   unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
 
+  Colormap cmap = DefaultColormap(display, DefaultScreen(display));
+
+  XColor border_color_r, exactColor_r;
+  Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
+
+  XColor border_color_b, exactColor_b;
+  Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
+
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
 
   struct winInfo w[total_windows_in_this_tag]; // stores the dimension and position of windows in tag
@@ -335,6 +343,8 @@ void manage_tree(unsigned int working_tag)
   w[0].winW = width;
   w[0].xpos = 0;
   w[0].ypos = 0;
+
+
 
   for (int i = 1; i < total_windows_in_this_tag; i++)
   { // gives each window their required dimensions and position
@@ -371,14 +381,14 @@ void manage_tree(unsigned int working_tag)
 
       if (total_windows_in_this_tag == 1)
       { // take the full size if it is the only window
-        XResizeWindow(display, working, width, height);
+        XResizeWindow(display, working, width- 2 * border_pixel, height -2 * border_pixel);
       }
       else
       {
-        XResizeWindow(display, working, w[i].winW, w[i].winH);
+        XResizeWindow(display, working, w[i].winW - 2*border_pixel, w[i].winH - border_pixel);
       }
       // moving the window to the place of the master
-      XMoveWindow(display, working, 0, 0);
+      XMoveWindow(display, working, border_pixel, border_pixel);
     }
     else
     { // this means it is the stack window
@@ -386,11 +396,11 @@ void manage_tree(unsigned int working_tag)
 
       printf("HEIGHT: %i, WIDTH: %i\n", w[i].winH, w[i].winH);
 
-      XResizeWindow(display, working, w[i].winW, w[i].winH);
+      XResizeWindow(display, working, w[i].winW - border_pixel, w[i].winH - border_pixel);
 
       printf("the position is (%i, %i)\n", w[i].xpos, w[i].ypos);
 
-      XMoveWindow(display, working, w[i].xpos, w[i].ypos);
+      XMoveWindow(display, working, w[i].xpos, w[i].ypos + border_pixel);
     }
   }
 }
@@ -399,16 +409,19 @@ void manage_centered_master(unsigned int working_tag)
 {
   float master = master_size[working_tag];
   float slave = 1.0 - master;
+  
+  printf("the master size is %f\n", master);
 
-  struct winInfo{//for storing windows dimension and position
+  struct winInfo//for storing windows dimension and position
+  {
     unsigned int winW;
     unsigned int winH;
     unsigned int xpos;
     unsigned int ypos;
   };
-  printf("the master size is %f\n", master);
 
   int height = scr->height - barheight;
+  height -= bargap;
   int width = scr->width;
 
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
@@ -422,6 +435,13 @@ void manage_centered_master(unsigned int working_tag)
 
   struct winInfo w[total_windows_in_this_tag];//stores the dimension and position of windows in tag
 
+  Colormap cmap = DefaultColormap(display, DefaultScreen(display));
+
+  XColor border_color_r, exactColor_r;
+  Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
+
+  XColor border_color_b, exactColor_b;
+  Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
 
   if(total_windows_in_this_tag==1)
   {
@@ -480,6 +500,19 @@ void manage_centered_master(unsigned int working_tag)
     XGetWindowAttributes(display, working, &atter);
     XMapWindow(display, working);
 
+    if (working == focused)
+    {
+      XSetWindowBorder(display, working, border_color_b.pixel);
+      // Set the window border color for focused
+    }
+    else
+    {
+      XSetWindowBorder(display, working, border_color_r.pixel);
+      // Set the window border color unfocused
+    }
+
+    XSetWindowBorderWidth(display, working, border_width);
+
     if(i==0)
     {
       printf("window %lu is a master\n",working);
@@ -489,8 +522,8 @@ void manage_centered_master(unsigned int working_tag)
       printf("window %lu is a stack \n",working);
     }
 
-    XResizeWindow(display,working,w[i].winW,w[i].winH);
-    XMoveWindow(display,working,w[i].xpos,w[i].ypos);
+    XResizeWindow(display,working,w[i].winW - border_pixel,w[i].winH - border_pixel);
+    XMoveWindow(display,working,w[i].xpos,w[i].ypos + border_pixel);
 
     printf("for index %d: \n",i);
 
@@ -785,6 +818,8 @@ void keypress(const XKeyEvent e)
       layout_no = 2;
       manage(working_tag);
     }
+
+
     
   }
 }
