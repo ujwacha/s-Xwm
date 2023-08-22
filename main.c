@@ -16,7 +16,7 @@ Window root;
 Screen *scr;
 
 int barheight = 19;
-int bargap = 3;
+int bargap = 2;
 int border_width = 2;
 Window barwin;
 
@@ -306,7 +306,6 @@ void manage_master_stack(unsigned int working_tag)
   }
 }
 
-//// CREDIT: Utsav Shrestha for implementation of this layout
 void manage_tree(unsigned int working_tag)
 {
   float master = master_size[working_tag];
@@ -329,6 +328,14 @@ void manage_tree(unsigned int working_tag)
 
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
 
+Colormap cmap = DefaultColormap(display, DefaultScreen(display));
+
+  XColor border_color_r, exactColor_r;
+  Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
+
+  XColor border_color_b, exactColor_b;
+  Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
+
   struct winInfo w[total_windows_in_this_tag]; // stores the dimension and position of windows in tag
 
   w[0].winH = height; // for master window
@@ -340,16 +347,16 @@ void manage_tree(unsigned int working_tag)
   { // gives each window their required dimensions and position
     if (w[i - 1].winW > w[i - 1].winH)
     {
-      w[i].winW = w[i - 1].winW / 2;
-      w[i - 1].winW /= 2;
+      w[i].winW = w[i - 1].winW *(1-master);
+      w[i - 1].winW *= master;
       w[i].winH = w[i - 1].winH;
       w[i].xpos = w[i - 1].xpos + w[i - 1].winW;
       w[i].ypos = w[i - 1].ypos;
     }
     else
     {
-      w[i].winH = w[i - 1].winH / 2;
-      w[i - 1].winH /= 2;
+      w[i].winH = w[i - 1].winH *(1-master);
+      w[i - 1].winH *= master;
       w[i].winW = w[i - 1].winW;
       w[i].ypos = w[i - 1].ypos + w[i - 1].winH;
       w[i].xpos = w[i - 1].xpos;
@@ -363,6 +370,20 @@ void manage_tree(unsigned int working_tag)
 
     XWindowAttributes atter;
     XGetWindowAttributes(display, working, &atter);
+
+    if (working == focused)
+    {
+      XSetWindowBorder(display, working, border_color_b.pixel);
+      // Set the window border color for focused
+    }
+    else
+    {
+      XSetWindowBorder(display, working, border_color_r.pixel);
+      // Set the window border color unfocused
+    }
+
+    XSetWindowBorderWidth(display, working, border_width);
+
     XMapWindow(display, working);
 
     if (i == 0)
@@ -513,7 +534,7 @@ void move_window_to_next_tag(Window w)
 }
 
 // I wrote this macro because typing this out everytime while defining a key was
-// a fucking chore
+// a chore
 // I want this Macro to be used only in the keypress function.
 // I can't gaurrentie it will work anywhere outside this function
 // Dont bring in bugs
@@ -530,7 +551,6 @@ void keypress(const XKeyEvent e)
 
   /* if (e.state & Mod1Mask && */
 
-  // shit this code is ugly as fuck
 
   if (e.state & Mod1Mask)
   {
