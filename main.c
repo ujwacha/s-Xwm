@@ -22,6 +22,8 @@ Window barwin;
 XEvent ev;
 unsigned long border_pixel = 20;
 char buffer[1024]; // 1kb buffer for doing stuff later
+void (*manager_ptr)(unsigned int);
+
 
 /// We here define a 2d array
 // I hope nobody opens more than 255 windows in a tag, that'd buffer overflow
@@ -34,7 +36,8 @@ float master_size[TOTAL_TAGS] = {
     DEFAULT_MASTER,
     DEFAULT_MASTER,
     DEFAULT_MASTER,
-    DEFAULT_MASTER, DEFAULT_MASTER,
+    DEFAULT_MASTER,
+    DEFAULT_MASTER,
     DEFAULT_MASTER,
     DEFAULT_MASTER,
     DEFAULT_MASTER,
@@ -45,6 +48,9 @@ float master_size[TOTAL_TAGS] = {
 unsigned int working_tag = 0;
 Window focused;
 Window preFocused;
+
+int layout_no = 0;
+
 
 void remove_things(Window *array, unsigned int index, unsigned int upto) {
   if (array[index] != 0) {
@@ -172,7 +178,7 @@ void unmap_all() {
 
 
 
-void manage(unsigned int working_tag) {
+void manage_master_stack(unsigned int working_tag) {
   float master = master_size[working_tag];
   float slave = 1.0 - master;
 
@@ -187,19 +193,42 @@ void manage(unsigned int working_tag) {
 
 
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
+
+
+
+    Colormap cmap = DefaultColormap(display, DefaultScreen(display));
+
+
+    XColor border_color_r, exactColor_r;
+    Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
+
+
+    XColor border_color_b, exactColor_b;
+    Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
+
+
+
   
   for (int i = 0; i < pertag_win[working_tag] ; i++) {
     Window working = clients[working_tag][i]; // get the window to map
-
-
-
-
-    XSetWindowBorder(display, working, border_pixel);
 
     printf("managing window %lu, INDEX: %i\n", working, i);
 
     XWindowAttributes atter;
     XGetWindowAttributes(display, working, &atter);
+
+
+    if (working == focused) {
+      XSetWindowBorder(display, working, border_color_b.pixel);
+      // Set the window border color for focused
+    } else {
+      XSetWindowBorder(display, working, border_color_r.pixel);
+      // Set the window border color unfocused
+    }
+    
+
+    XSetWindowBorderWidth(display, working, 2);
+
     XMapWindow(display, working);
 
     
@@ -229,6 +258,110 @@ void manage(unsigned int working_tag) {
       
       XMoveWindow(display, working, width * master, ypos);
     }
+  }
+}
+
+
+
+
+
+
+
+//// CREDIT: Utsav Shrestha for implementation of this layout
+void manage_tree(unsigned int working_tag) {
+  float master = master_size[working_tag];
+  float slave = 1.0 - master;
+
+  struct winInfo{//for storing windows dimension and position
+    int winW;
+    int winH;
+    int xpos;
+    int ypos;
+  };
+  printf("the master size is %f\n", master);
+
+  int height = scr->height - barheight;
+  int width = scr->width;
+
+  unsigned int total_windows_in_this_tag = pertag_win[working_tag];
+  unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
+
+
+  printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
+
+  struct winInfo w[total_windows_in_this_tag];//stores the dimension and position of windows in tag
+
+  w[0].winH=height;//for master window
+  w[0].winW=width;
+  w[0].xpos=0;
+  w[0].ypos=0;
+  
+  for (int i=1;i<total_windows_in_this_tag;i++){//gives each window their required dimensions and position
+    if (w[i-1].winW>w[i-1].winH){
+      w[i].winW=w[i-1].winW/2;
+      w[i-1].winW/=2;
+      w[i].winH=w[i-1].winH;
+      w[i].xpos=w[i-1].xpos+w[i-1].winW;
+      w[i].ypos=w[i-1].ypos;
+    }
+    else{
+      w[i].winH=w[i-1].winH/2;
+      w[i-1].winH/=2;
+      w[i].winW=w[i-1].winW;
+      w[i].ypos=w[i-1].ypos+w[i-1].winH;
+      w[i].xpos=w[i-1].xpos;
+    }
+  }
+  for (int i = 0; i < pertag_win[working_tag] ; i++) {
+    Window working = clients[working_tag][i]; // get the window to map
+
+    printf("managing window %lu, INDEX: %i\n", working, i);
+
+    XWindowAttributes atter;
+    XGetWindowAttributes(display, working, &atter);
+    XMapWindow(display, working);
+
+   
+    if (i == 0) { // this means it is the master window
+       printf("window %lu is a master\n" , working );
+
+      if (total_windows_in_this_tag == 1) { // take the full size if it is the only window
+	         XResizeWindow(display, working, width , height);
+       } else {
+	 XResizeWindow(display, working,w[i].winW, w[i].winH);
+       }
+       //moving the window to the place of the master
+       XMoveWindow(display, working, 0, 0); 
+      
+     } else { // this means it is the stack window
+       printf("window %lu is a slave\n" , working );
+
+       printf("HEIGHT: %i, WIDTH: %i\n", w[i].winH,w[i].winH );
+
+       XResizeWindow(display, working,w[i].winW, w[i].winH);
+
+
+       printf("the position is (%i, %i)\n", w[i].xpos, w[i].ypos);
+      
+       XMoveWindow(display, working, w[i].xpos, w[i].ypos);
+    }
+      
+  }
+}
+
+
+
+
+void manage(unsigned int working_tag) {
+  switch (layout_no) {
+  case 0:
+    manage_master_stack(working_tag);
+    break;
+  case 1:
+    manage_tree(working_tag);
+    break;
+  default:
+    manage_master_stack(working_tag);
   }
 }
 
@@ -367,7 +500,6 @@ void keypress(const XKeyEvent e) {
       GOTOTAG(0);
     } else if (ISKEY("2")) {
       GOTOTAG(1);
-      printf("Workspace 2 is set");
     } else if (ISKEY("3")) {
       GOTOTAG(2);
     } else if (ISKEY("4")) {
@@ -418,6 +550,12 @@ void keypress(const XKeyEvent e) {
       manage(working_tag);
     } else if (ISKEY("W")) {
       system("firefox &");
+    } else if (ISKEY("R")) {
+      layout_no = 1;
+      manage(working_tag);
+    } else if (ISKEY("B")) {
+      layout_no = 0;
+      manage(working_tag);
     }
   }
 }
@@ -445,13 +583,18 @@ int handle_events(XEvent ev) {
   case FocusIn:
     printf("focusin event just came, 0x%lx gained focus \n\n\n", ev.xfocus.window);
     break;
-  case EnterNotify:
-    printf("Entered");
-    Window entered =  ev.xcrossing.window;
-    if (entered != focused) {
-      XSetInputFocus(display, entered, RevertToParent, CurrentTime);
-    }
+  case FocusOut:
+    printf("focusout event just came, 0x%lx gained focus \n\n\n", ev.xfocus.window);
     break;
+      /* case EnterNotify: */
+  /*   printf("Entered"); */
+  /*   Window entered =  ev.xcrossing.window; */
+  /*   if (entered != focused) { */
+  /*     XSetInputFocus(display, entered, RevertToParent, CurrentTime); */
+  /*     focused = entered; */
+  /*     manage(working_tag); */
+  /*   } */
+  /*   break; */
   }
 
   XSync(display, False);
@@ -503,6 +646,8 @@ void setkeys() {
   MOD1BIND("I");
   ///
   MOD1BIND("W");
+  MOD1BIND("R");
+  MOD1BIND("B");
 }
 
 
@@ -542,7 +687,11 @@ void *update_bar() {
       strcpy(buffer, tempbu);
       XClearWindow(display, barwin);
     }
-    XDrawString(display, barwin, DefaultGC(display, DefaultScreen(display)), 10, 10, buffer, strlen(buffer));
+
+    XDrawString(display, barwin,
+		DefaultGC(display, DefaultScreen(display)),
+		10, 10, buffer, strlen(buffer));
+
     fclose(fp);
   }
 }
@@ -562,6 +711,11 @@ int main() {
     printf("Sucess getting the display\n");
   }
 
+  printf("Gonna check if another window manager exists");
+  
+  checkotherwm(display, root);
+
+
   barwin = runbar();
 
   pthread_t thread;
@@ -569,10 +723,6 @@ int main() {
   pthread_create(&thread, NULL, update_bar, NULL);
   
   printf("bar window is %lu\n", barwin);
-
-  printf("Gonna check if another window exists");
-  
-  checkotherwm(display, root);
 
   printf("setting the keybindings\n");
 
