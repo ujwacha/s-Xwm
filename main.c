@@ -17,12 +17,13 @@ Window root;
 Screen *scr;
 
 int barheight = 19;
+int bargap = 3;
+int border_width = 2;
 Window barwin;
 
 XEvent ev;
 unsigned long border_pixel = 20;
 char buffer[1024]; // 1kb buffer for doing stuff later
-void (*manager_ptr)(unsigned int);
 
 
 /// We here define a 2d array
@@ -46,8 +47,7 @@ float master_size[TOTAL_TAGS] = {
     };
 
 unsigned int working_tag = 0;
-Window focused;
-Window preFocused;
+Window focused = 0;
 
 int layout_no = 0;
 
@@ -188,6 +188,7 @@ void manage_master_stack(unsigned int working_tag) {
   int width = scr->width;
 
   height -= barheight;
+  height -= bargap;
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
   unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
 
@@ -227,7 +228,7 @@ void manage_master_stack(unsigned int working_tag) {
     }
     
 
-    XSetWindowBorderWidth(display, working, 2);
+    XSetWindowBorderWidth(display, working, border_width);
 
     XMapWindow(display, working);
 
@@ -382,7 +383,11 @@ int error(Display *display, XErrorEvent *ev) {
 
 int checkotherwm(Display *display, Window root) {
   XSetErrorHandler(wmerror);
-  XSelectInput(display, root, SubstructureRedirectMask | SubstructureNotifyMask);
+  XSelectInput(display, root,
+	       SubstructureRedirectMask // get all the things you want
+	       | SubstructureNotifyMask
+	       | PointerMotionMask
+	       | EnterWindowMask); 
   XSync(display, False);
   XSetErrorHandler(error);
   XSync(display, False);
@@ -565,6 +570,24 @@ void keypress(const XKeyEvent e) {
 /*   Window foc = f.window; */
 /* } */
 
+void motion_event_fn() {
+    Window hoverWin ;
+    int rootX, rootY, winX, winY;
+
+    unsigned int mask;
+    XQueryPointer(display, root, &root, &hoverWin, &rootX, &rootY, &winX, &winY, &mask);
+
+    if (hoverWin != focused) {
+      printf("focusing\n");
+      XSetInputFocus(display, hoverWin, RevertToParent, CurrentTime);
+      focused = hoverWin;
+      XRaiseWindow(display, focused);
+      manage(working_tag);
+    }
+ 
+}
+
+
 int handle_events(XEvent ev) {
 
   switch (ev.type) {
@@ -586,7 +609,7 @@ int handle_events(XEvent ev) {
   case FocusOut:
     printf("focusout event just came, 0x%lx gained focus \n\n\n", ev.xfocus.window);
     break;
-      /* case EnterNotify: */
+  /* case EnterNotify: */
   /*   printf("Entered"); */
   /*   Window entered =  ev.xcrossing.window; */
   /*   if (entered != focused) { */
@@ -595,6 +618,9 @@ int handle_events(XEvent ev) {
   /*     manage(working_tag); */
   /*   } */
   /*   break; */
+  case MotionNotify:
+    motion_event_fn();
+   break; 
   }
 
   XSync(display, False);
@@ -648,6 +674,7 @@ void setkeys() {
   MOD1BIND("W");
   MOD1BIND("R");
   MOD1BIND("B");
+  
 }
 
 
