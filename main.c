@@ -48,8 +48,8 @@ Window focused;
 
 int layout_no = 1;
 
-#define TOTALKEYS 26
-char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B"};
+#define TOTALKEYS 27
+char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A"};
 
 void read_config()
 {
@@ -338,7 +338,6 @@ void manage_master_stack(unsigned int working_tag)
   }
 }
 
-//// CREDIT: Utsav Shrestha for implementation of this layout
 void manage_tree(unsigned int working_tag)
 {
   float master = master_size[working_tag];
@@ -359,7 +358,23 @@ void manage_tree(unsigned int working_tag)
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
   unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
 
+  Colormap cmap = DefaultColormap(display, DefaultScreen(display));
+
+  XColor border_color_r, exactColor_r;
+  Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
+
+  XColor border_color_b, exactColor_b;
+  Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
+
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
+
+  Colormap cmap = DefaultColormap(display, DefaultScreen(display));
+
+  XColor border_color_r, exactColor_r;
+  Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
+
+  XColor border_color_b, exactColor_b;
+  Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
 
   struct winInfo w[total_windows_in_this_tag]; // stores the dimension and position of windows in tag
 
@@ -372,16 +387,16 @@ void manage_tree(unsigned int working_tag)
   { // gives each window their required dimensions and position
     if (i % 2 == 1)
     {
-      w[i].winW = w[i - 1].winW / 2;
-      w[i - 1].winW /= 2;
+      w[i].winW = w[i - 1].winW * (1 - master);
+      w[i - 1].winW *= master;
       w[i].winH = w[i - 1].winH;
       w[i].xpos = w[i - 1].xpos + w[i - 1].winW;
       w[i].ypos = w[i - 1].ypos;
     }
     else
     {
-      w[i].winH = w[i - 1].winH / 2;
-      w[i - 1].winH /= 2;
+      w[i].winH = w[i - 1].winH * (1 - master);
+      w[i - 1].winH *= master;
       w[i].winW = w[i - 1].winW;
       w[i].ypos = w[i - 1].ypos + w[i - 1].winH;
       w[i].xpos = w[i - 1].xpos;
@@ -395,8 +410,34 @@ void manage_tree(unsigned int working_tag)
 
     setBorder(working);
     XMapWindow(display, working);
-    plot(working, w[i].xpos, w[i].ypos, w[i].winW, w[i].winH);
-    printf("Array %d: %d %d %d %d", i, w[i].xpos, w[i].ypos, w[i].winW, w[i].winH);
+
+    if (i == 0)
+    { // this means it is the master window
+      printf("window %lu is a master\n", working);
+
+      if (total_windows_in_this_tag == 1)
+      { // take the full size if it is the only window
+        XResizeWindow(display, working, width, height);
+      }
+      else
+      {
+        XResizeWindow(display, working, w[i].winW, w[i].winH);
+      }
+      // moving the window to the place of the master
+      XMoveWindow(display, working, 0, 0);
+    }
+    else
+    { // this means it is the stack window
+      printf("window %lu is a slave\n", working);
+
+      printf("HEIGHT: %i, WIDTH: %i\n", w[i].winH, w[i].winH);
+
+      XResizeWindow(display, working, w[i].winW, w[i].winH);
+
+      printf("the position is (%i, %i)\n", w[i].xpos, w[i].ypos);
+
+      XMoveWindow(display, working, w[i].xpos, w[i].ypos);
+    }
   }
 }
 
@@ -410,6 +451,11 @@ void manage(unsigned int working_tag)
   case 1:
     manage_tree(working_tag);
     break;
+
+  case 2:
+    manage_centered_master(working_tag);
+    break;
+
   default:
     manage_master_stack(working_tag);
   }
@@ -518,7 +564,7 @@ void move_window_to_next_tag(Window w)
 }
 
 // I wrote this macro because typing this out everytime while defining a key was
-// a fucking chore
+// a chore
 // I want this Macro to be used only in the keypress function.
 // I can't gaurrentie it will work anywhere outside this function
 // Dont bring in bugs
@@ -534,8 +580,6 @@ void keypress(const XKeyEvent e)
   printf("keypresss request seen\n");
 
   /* if (e.state & Mod1Mask && */
-
-  // shit this code is ugly as fuck
 
   if (e.state & Mod1Mask)
   {
@@ -672,6 +716,11 @@ void keypress(const XKeyEvent e)
     else if (ISKEY(keyBindings[25]))
     {
       layout_no = 0;
+      manage(working_tag);
+    }
+    else if (ISKEY(keyBindings[26]))
+    {
+      layout_no = 2;
       manage(working_tag);
     }
   }
