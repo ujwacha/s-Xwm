@@ -68,8 +68,8 @@ Window focused;
 
 int layout_no = 0;
 
-#define TOTALKEYS 29
-char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A", "N", "E"};
+#define TOTALKEYS 30 
+char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A", "N", "E", "F"};
 
 void read_config()
 {
@@ -743,7 +743,6 @@ void killer()
 
   if (tempwindow_index == 0)
   {
-    tempfocus = clients[working_tag][1];
   }
   else
   {
@@ -757,6 +756,13 @@ void killer()
   manage(working_tag);
 }
 
+
+void killer_point(XKeyEvent e)
+{
+  XKillClient(display, e.subwindow);
+  printf("Killed the window %lu\n", e.subwindow);
+}
+
 void keypress(const XKeyEvent e)
 {
   printf("keypresss request seen\n");
@@ -768,6 +774,9 @@ void keypress(const XKeyEvent e)
     if (ISKEY(keyBindings[0]))
     {
       killer();
+    }
+    else if (ISKEY("F")) {
+      killer_point(e);
     }
     else if (ISKEY(keyBindings[1]))
     {
