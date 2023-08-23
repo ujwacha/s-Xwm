@@ -58,8 +58,8 @@ Window focused;
 
 int layout_no = 0;
 
-#define TOTALKEYS 28
-char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A", "N"};
+#define TOTALKEYS 29
+char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A", "N", "E"};
 
 void read_config()
 {
@@ -568,6 +568,40 @@ void change_focus_to_next(unsigned int working_tag)
   manage(working_tag);
 }
 
+
+
+// Credit: Suyog Bhandari 
+void change_focus_to_previous(unsigned int working_tag)
+{
+  Window temporary = focused;
+  int total_windows_in_this_tag = pertag_win[working_tag];
+  int index;
+
+  printf("\nthe focused window is %lu \n", temporary);
+
+  for (int i = 0; i < total_windows_in_this_tag; i++)
+  {
+    if (temporary == clients[working_tag][i])
+    {
+      index = i;
+    }
+  }
+
+  if (index == 0)
+  {
+    focused = clients[working_tag][total_windows_in_this_tag - 1];
+  }
+  else
+  {
+    focused = clients[working_tag][index - 1];
+  }
+
+  manage(working_tag);
+}
+
+
+
+
 int wmerror(Display *display, XErrorEvent *ev)
 {
   die("another wm is already here\n");
@@ -859,6 +893,8 @@ void keypress(const XKeyEvent e)
     else if (ISKEY("N"))
     {
       change_focus_to_next(working_tag);
+    } else if (ISKEY("E")) {
+      change_focus_to_previous(working_tag);
     }
   }
 }
