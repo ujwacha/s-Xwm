@@ -623,19 +623,17 @@ void change_focus_to_next(unsigned int working_tag)
   
 }
 
+
 void change_focus_to_previous(unsigned int working_tag)
 {
-  Window temporary;
-  int revert;
+  Window temporary = focused;
   int total_windows_in_this_tag = pertag_win[working_tag];
-  int index,i;
-
-  temporary = focused;
-
-  XGetInputFocus(display,&temporary,&revert);
+  int index;
 
 
-  for(i=0;i<total_windows_in_this_tag;i++)
+  printf("\nthe focused window is %lu \n",temporary);
+
+  for(int i=0;i<total_windows_in_this_tag;i++)
   {
     if(temporary == clients[working_tag][i])
     {
@@ -644,18 +642,15 @@ void change_focus_to_previous(unsigned int working_tag)
   }
 
 
-  if(index == 0)
-  {
-    XSetInputFocus(display,clients[working_tag][total_windows_in_this_tag-1],RevertToParent,CurrentTime);
+  if(index == 0) {
     focused = clients[working_tag][total_windows_in_this_tag-1];
   }
-  else
-  {
-    XSetInputFocus(display,clients[working_tag][index-1],RevertToParent,CurrentTime);
+  else{
     focused = clients[working_tag][index-1];
   }
 
   manage(working_tag);
+  
 }
 
 int wmerror(Display *display, XErrorEvent *ev)
