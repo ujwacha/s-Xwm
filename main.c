@@ -139,6 +139,28 @@ void move_front(Window w, unsigned int wor_tag)
   }
 }
 
+
+
+int window_index(Window w, unsigned int wor_tag)
+{
+  // making a temporary window because we'll have to do some
+  // variable swapping
+  Window temp;
+  for (int i = 0; i < pertag_win[wor_tag]; i++)
+  {
+    if (clients[wor_tag][i] == w)
+    {
+      return i;
+    }
+  }
+  return -1; // error
+}
+
+
+
+
+
+
 void move_back(Window w, unsigned int wor_tag)
 {
   // making a temporary window because we'll have to do some
@@ -661,6 +683,37 @@ void move_window_to_next_tag(Window w)
   working_tag = T; \
   manage(working_tag);
 
+
+void killer() {
+  // this feature adds a but but it's still better than having no feature at all
+  printf("the focused widow is %lu\n", focused);
+  if (focused == barwin)
+    {
+      printf("Cant kill Bar Window\n");
+      return;
+    }
+
+  int tempwindow_index = window_index(focused, working_tag);
+  printf("the index is %i \n\n\n", tempwindow_index);
+  
+  Window tempfocus;
+
+
+  if (tempwindow_index == 0 ) {
+    // IDK what to do here, gonna do it later
+  } else {
+    tempfocus = clients[working_tag][tempwindow_index - 1];
+  }
+  
+ 
+  XKillClient(display, focused); // Kill the window
+ 
+  focused = tempfocus;
+  printf("Killed the focuse window %lu\n", focused);
+  manage(working_tag);
+}
+
+
 void keypress(const XKeyEvent e)
 {
   printf("keypresss request seen\n");
@@ -671,14 +724,7 @@ void keypress(const XKeyEvent e)
   {
     if (ISKEY(keyBindings[0]))
     {
-      printf("the focused widow is %lu\n", focused);
-      if (focused == barwin)
-      {
-        printf("Cant kill Bar Window\n");
-        return;
-      }
-      XKillClient(display, focused); // Kill the window
-      printf("Killed the focuse window %lu\n", focused);
+      killer();
     }
     else if (ISKEY(keyBindings[1]))
     {
