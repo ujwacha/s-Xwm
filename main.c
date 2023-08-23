@@ -14,23 +14,32 @@
 Display *display;
 Window root;
 Screen *scr;
+int swidth, sheight; // width and height of space available to plot windows
 
-int barheight = 19;
-int bargap = 2;
+int barheight = 22;
 int border_width = 2;
 Window barwin;
 
 XEvent ev;
-unsigned long border_pixel = 15;
+unsigned long border_pixel = 5;
 char buffer[1024]; // 1kb buffer for doing stuff later
+
+typedef struct
+{ // for storing windows dimension and position
+  int winW;
+  int winH;
+  int xpos;
+  int ypos;
+} winInfo;
 
 /// We here define a 2d array
 // I hope nobody opens more than 255 windows in a tag, that'd buffer overflow
 // the system
 // this is the vital security flaw of this window manager
 
-Window clients[255][TOTAL_TAGS] = {0};
+Window clients[TOTAL_TAGS][30] = {0};
 unsigned int pertag_win[TOTAL_TAGS] = {0};
+winInfo clientsInfo[TOTAL_TAGS][30] = {0};
 float master_size[TOTAL_TAGS] = {
     DEFAULT_MASTER,
     DEFAULT_MASTER,
@@ -50,7 +59,7 @@ Window focused;
 int layout_no = 0;
 
 #define TOTALKEYS 28
-char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B","A", "N"};
+char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A", "N"};
 
 void read_config()
 {
@@ -172,9 +181,6 @@ int remove_window(Window w, unsigned int wor_tag)
   return 1;
 }
 
-
-
-
 int window_exists(Window w, unsigned int wor_tag)
 {
   // search for a window in a tag and remove the window
@@ -187,12 +193,6 @@ int window_exists(Window w, unsigned int wor_tag)
   }
   return 0; // the window does not exist
 }
-
-
-
-
-
-
 
 int remove_all_instance_of_window(Window w)
 {
@@ -246,6 +246,74 @@ void unmap_all()
   }
 }
 
+void setBorder(Window window)
+{
+  Colormap cmap = DefaultColormap(display, DefaultScreen(display));
+
+  XColor border_color_r, exactColor_r;
+  Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
+
+  XColor border_color_b, exactColor_b;
+  Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
+
+  if (window == focused)
+  {
+    XSetWindowBorder(display, window, border_color_b.pixel);
+    // Set the window border color for focused
+  }
+  else
+  {
+    XSetWindowBorder(display, window, border_color_r.pixel);
+    // Set the window border color unfocused
+  }
+
+  XSetWindowBorderWidth(display, window, border_width);
+}
+
+// Maps the window with adjusted spacing between windows.
+void plot(unsigned int working_tag)
+{
+  // position two corner pixels and width height of window
+  int xpos, ypos, oxpos, oypos, winW, winH;
+  winInfo *w;
+
+  for (int i = 0; i < pertag_win[working_tag]; i++)
+  {
+    Window working = clients[working_tag][i]; // get the window to map
+    w = &clientsInfo[working_tag][i];
+
+    printf("managing window %lu, INDEX: %i\n", working, i);
+
+    xpos = w->xpos;
+    ypos = w->ypos;
+    winW = w->winW;
+    winH = w->winH;
+    oxpos = xpos + winW;
+    oypos = ypos + winH;
+    if (xpos == 0)
+    {
+      xpos += border_pixel;
+      winW -= border_pixel;
+    }
+    if (ypos == 0)
+    {
+      ypos += border_pixel;
+      winH -= border_pixel;
+    }
+    if (oxpos > swidth - 5 && oxpos < swidth + 5)
+      winW -= border_pixel;
+    if (oypos > sheight - 5 && oypos < sheight + 5)
+      winH -= (border_pixel - 5);
+    xpos += border_pixel;
+    ypos += border_pixel;
+    winW -= (2 * border_pixel + 5);
+    winH -= (2 * border_pixel + 5);
+    setBorder(working);
+    XMoveResizeWindow(display, working, xpos, ypos, winW, winH);
+    XMapWindow(display, working);
+  }
+}
+
 void manage_master_stack(unsigned int working_tag)
 {
   float master = master_size[working_tag];
@@ -253,84 +321,52 @@ void manage_master_stack(unsigned int working_tag)
 
   printf("the master size is %f\n", master);
 
-  int height = scr->height;
-  int width = scr->width;
-
-  height -= barheight;
-  height -= bargap;
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
   unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
 
-  printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
+  // stores the dimension and position of a window in tag
+  winInfo *w = &clientsInfo[working_tag][0];
 
+  // window info
+
+  printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
 
   XSetInputFocus(display, focused, RevertToParent, CurrentTime);
 
-  Colormap cmap = DefaultColormap(display, DefaultScreen(display));
+  // set winInfo for master window
+  if (total_windows_in_this_tag == 1)
+  { // take the full size if it is the only window
+    w->winW = swidth;
+    w->winH = sheight;
+  }
+  else
+  {
+    w->winW = swidth * master;
+    w->winH = sheight;
+  }
+  w->xpos = 0;
+  w->ypos = 0;
 
-  XColor border_color_r, exactColor_r;
-  Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
-
-  XColor border_color_b, exactColor_b;
-  Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
-
-  for (int i = 0; i < pertag_win[working_tag]; i++)
+  // set winInfo for stacks
+  for (int i = 1; i < pertag_win[working_tag]; i++)
   {
     Window working = clients[working_tag][i]; // get the window to map
+    w = &clientsInfo[working_tag][i];
 
     printf("managing window %lu, INDEX: %i\n", working, i);
 
-    XWindowAttributes atter;
-    XGetWindowAttributes(display, working, &atter);
+    printf("window %lu is a slave\n", working);
+    w->winH = sheight / total_stacks_in_this_tag;
+    w->winW = swidth * slave;
+    printf("HEIGHT: %i, WIDTH: %i\n", w->winH, w->winW);
 
-    if (working == focused)
-    {
-      printf("focused : %lu", working);
+    w->xpos = swidth * master;
+    w->ypos = w->winH * (i - 1);
 
-      XSetWindowBorder(display, working, border_color_b.pixel);
-      // Set the window border color for focused
-    }
-    else
-    {
-      XSetWindowBorder(display, working, border_color_r.pixel);
-      // Set the window border color unfocused
-    }
-
-    XSetWindowBorderWidth(display, working, border_width);
-
-    XMapWindow(display, working);
-
-    if (i == 0)
-    { // this means it is the master window
-      printf("window %lu is a master\n", working);
-
-      if (total_windows_in_this_tag == 1)
-      { // take the full size if it is the only window
-        XResizeWindow(display, working, width - 2 * border_pixel, height - 2 * border_pixel);
-      }
-      else
-      {
-        XResizeWindow(display, working, width * master - 1.5 * border_pixel, height - 2 * border_pixel);
-      }
-      // moving the window to the place of the master
-      XMoveWindow(display, working, 0 + border_pixel, 0 + border_pixel);
-    }
-    else
-    { // this means it is the stack window
-      printf("window %lu is a slave\n", working);
-      int slave_height = (height - (total_stacks_in_this_tag + 1) * border_pixel) / total_stacks_in_this_tag;
-
-      printf("HEIGHT: %i, WIDTH: %i\n", slave_height, (int)(width * slave));
-
-      XResizeWindow(display, working, width * slave - 1.5 * border_pixel, slave_height);
-      int xpos = width * master + 0.5 * border_pixel;
-      int ypos = slave_height * (i - 1) + i * border_pixel;
-
-      printf("the position is (%i, %i)\n", xpos, ypos);
-
-      XMoveWindow(display, working, xpos, ypos);
-    }
+    printf("the position is (%i, %i)\n", w->xpos, w->ypos);
   }
+
+  plot(working_tag);
 }
 
 void manage_tree(unsigned int working_tag)
@@ -338,241 +374,115 @@ void manage_tree(unsigned int working_tag)
   float master = master_size[working_tag];
   float slave = 1.0 - master;
 
-  struct winInfo
-  { // for storing windows dimension and position
-    int winW;
-    int winH;
-    int xpos;
-    int ypos;
-  };
   printf("the master size is %f\n", master);
-
-  int height = scr->height - barheight;
-  int width = scr->width;
 
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
   unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
 
-  Colormap cmap = DefaultColormap(display, DefaultScreen(display));
-
-  XColor border_color_r, exactColor_r;
-  Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
-
-  XColor border_color_b, exactColor_b;
-  Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
-
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
 
+  // stores the dimension and position of a window in tag
+  winInfo *w = &clientsInfo[working_tag][0];
+  winInfo *pw;
 
-  struct winInfo w[total_windows_in_this_tag]; // stores the dimension and position of windows in tag
+  w->winH = sheight; // for master window
+  w->winW = swidth;
+  w->xpos = 0;
+  w->ypos = 0;
 
-  w[0].winH = height; // for master window
-  w[0].winW = width;
-  w[0].xpos = 0;
-  w[0].ypos = 0;
-
-
-
-  for (int i = 1; i < total_windows_in_this_tag; i++)
+  for (int i = 1; i < total_windows_in_this_tag; i++, w++)
   { // gives each window their required dimensions and position
-    if (w[i - 1].winW > w[i - 1].winH)
+    w = &clientsInfo[working_tag][i];
+    pw = &clientsInfo[working_tag][i - 1];
+    if (i % 2 == 1)
     {
-      w[i].winW = w[i - 1].winW *(1-master);
-      w[i - 1].winW *= master;
-      w[i].winH = w[i - 1].winH;
-      w[i].xpos = w[i - 1].xpos + w[i - 1].winW;
-      w[i].ypos = w[i - 1].ypos;
+      w->winW = pw->winW * (1 - master);
+      pw->winW *= master;
+      w->winH = pw->winH;
+      w->xpos = pw->xpos + pw->winW;
+      w->ypos = pw->ypos;
     }
     else
     {
-      w[i].winH = w[i - 1].winH *(1-master);
-      w[i - 1].winH *= master;
-      w[i].winW = w[i - 1].winW;
-      w[i].ypos = w[i - 1].ypos + w[i - 1].winH;
-      w[i].xpos = w[i - 1].xpos;
+      w->winH = pw->winH * (1 - master);
+      pw->winH *= master;
+      w->winW = pw->winW;
+      w->ypos = pw->ypos + pw->winH;
+      w->xpos = pw->xpos;
     }
   }
-  for (int i = 0; i < pertag_win[working_tag]; i++)
-  {
-    Window working = clients[working_tag][i]; // get the window to map
 
-    printf("managing window %lu, INDEX: %i\n", working, i);
-
-    XWindowAttributes atter;
-    XGetWindowAttributes(display, working, &atter);
-
-    if (working == focused)
-    {
-      XSetWindowBorder(display, working, border_color_b.pixel);
-      // Set the window border color for focused
-    }
-    else
-    {
-      XSetWindowBorder(display, working, border_color_r.pixel);
-      // Set the window border color unfocused
-    }
-
-    XSetWindowBorderWidth(display, working, border_width);
-
-    XMapWindow(display, working);
-
-    if (i == 0)
-    { // this means it is the master window
-      printf("window %lu is a master\n", working);
-
-      if (total_windows_in_this_tag == 1)
-      { // take the full size if it is the only window
-        XResizeWindow(display, working, width- 2 * border_pixel, height -2 * border_pixel);
-      }
-      else
-      {
-        XResizeWindow(display, working, w[i].winW - 2*border_pixel, w[i].winH - border_pixel);
-      }
-      // moving the window to the place of the master
-      XMoveWindow(display, working, border_pixel, border_pixel);
-    }
-    else
-    { // this means it is the stack window
-      printf("window %lu is a slave\n", working);
-
-      printf("HEIGHT: %i, WIDTH: %i\n", w[i].winH, w[i].winH);
-
-      XResizeWindow(display, working, w[i].winW - border_pixel, w[i].winH - border_pixel);
-
-      printf("the position is (%i, %i)\n", w[i].xpos, w[i].ypos);
-
-      XMoveWindow(display, working, w[i].xpos, w[i].ypos + border_pixel);
-    }
-  }
+  plot(working_tag);
 }
 
 void manage_centered_master(unsigned int working_tag)
 {
   float master = master_size[working_tag];
   float slave = 1.0 - master;
-  
+
   printf("the master size is %f\n", master);
-
-  struct winInfo//for storing windows dimension and position
-  {
-    unsigned int winW;
-    unsigned int winH;
-    unsigned int xpos;
-    unsigned int ypos;
-  };
-
-  int height = scr->height - barheight;
-  height -= bargap;
-  int width = scr->width;
 
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
   unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
 
   unsigned int divider = total_stacks_in_this_tag;
 
-  printf("\n%i\n",divider);
+  printf("\n%i\n", divider);
 
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
 
-  struct winInfo w[total_windows_in_this_tag];//stores the dimension and position of windows in tag
+  winInfo *w = &clientsInfo[working_tag][0]; // stores the dimension and position of windows in tag
 
-  Colormap cmap = DefaultColormap(display, DefaultScreen(display));
-
-  XColor border_color_r, exactColor_r;
-  Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
-
-  XColor border_color_b, exactColor_b;
-  Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
-
-  if(total_windows_in_this_tag==1)
+  if (total_windows_in_this_tag == 1)
   {
-    w[0].winH = height;
-    w[0].winW = width;
-    w[0].xpos = 0;
-    w[0].ypos = 0;
+    w->winH = sheight;
+    w->winW = swidth;
+    w->xpos = 0;
+    w->ypos = 0;
   }
 
-  else if(total_windows_in_this_tag==2)
+  else if (total_windows_in_this_tag == 2)
   {
-    w[0].winH = height;
-    w[0].winW = width*0.6;
-    w[0].xpos = 0;
-    w[0].ypos = 0;
+    w->winH = sheight;
+    w->winW = swidth * 0.6;
+    w->xpos = 0;
+    w->ypos = 0;
 
-    w[1].winH = height;
-    w[1].winW = width-w[0].winW;
-    w[1].xpos = w[0].winW;
-    w[1].ypos = 0;
+    (w + 1)->winH = sheight;
+    (w + 1)->winW = swidth - w->winW;
+    (w + 1)->xpos = w->winW;
+    (w + 1)->ypos = 0;
   }
 
   else
   {
-    w[0].winH = height;
-    w[0].winW = width*0.5;
-    w[0].xpos = width*0.25;
-    w[0].ypos = 0;
+    w->winH = sheight;
+    w->winW = swidth * 0.5;
+    w->xpos = swidth * 0.25;
+    w->ypos = 0;
 
-    for(int i=total_stacks_in_this_tag;i>0;i--)
+    for (int i = total_stacks_in_this_tag; i > 0; i--)
     {
-      if(i%2!=0)
+      w = &clientsInfo[working_tag][i];
+      if (i % 2 != 0)
       {
-        w[i].winW = width*0.25;
-        w[i].winH = (height) /((total_stacks_in_this_tag+1)/2);
-        w[i].xpos = width*0.75;
-        w[i].ypos = ((height)/((total_stacks_in_this_tag+1)/2))*((i-1)/2);
+        w->winW = swidth * 0.25;
+        w->winH = (sheight) / ((total_stacks_in_this_tag + 1) / 2);
+        w->xpos = swidth * 0.75;
+        w->ypos = ((sheight) / ((total_stacks_in_this_tag + 1) / 2)) * ((i - 1) / 2);
       }
 
       else
       {
-        w[i].winW = width*0.25;
-        w[i].winH = (height) /(total_stacks_in_this_tag/2);
-        w[i].xpos = 0;
-        w[i].ypos = ((height) /(total_stacks_in_this_tag/2))*((i-2)/2);
+        w->winW = swidth * 0.25;
+        w->winH = (sheight) / (total_stacks_in_this_tag / 2);
+        w->xpos = 0;
+        w->ypos = ((sheight) / (total_stacks_in_this_tag / 2)) * ((i - 2) / 2);
       }
     }
   }
 
-  for (int i = 0; i < pertag_win[working_tag] ; i++) {
-    Window working = clients[working_tag][i]; // get the window to map
-
-    printf("managing window %lu, INDEX: %i\n", working, i);
-
-    XWindowAttributes atter;
-    XGetWindowAttributes(display, working, &atter);
-    XMapWindow(display, working);
-
-    if (working == focused)
-    {
-      XSetWindowBorder(display, working, border_color_b.pixel);
-      // Set the window border color for focused
-    }
-    else
-    {
-      XSetWindowBorder(display, working, border_color_r.pixel);
-      // Set the window border color unfocused
-    }
-
-    XSetWindowBorderWidth(display, working, border_width);
-
-    if(i==0)
-    {
-      printf("window %lu is a master\n",working);
-    }
-    else
-    {
-      printf("window %lu is a stack \n",working);
-    }
-
-    XResizeWindow(display,working,w[i].winW - border_pixel,w[i].winH - border_pixel);
-    XMoveWindow(display,working,w[i].xpos,w[i].ypos + border_pixel);
-
-    printf("for index %d: \n",i);
-
-    printf("width: %u \n",w[i].winW);
-    printf("height: %u \n",w[i].winH);
-    printf("x-position: %u \n",w[i].xpos);
-    printf("y-position: %u \n",w[i].ypos);
-  } 
+  plot(working_tag);
 }
 
 void manage(unsigned int working_tag)
@@ -589,16 +499,11 @@ void manage(unsigned int working_tag)
   case 2:
     manage_centered_master(working_tag);
     break;
-  
+
   default:
     manage_master_stack(working_tag);
   }
 }
-
-
-
-
-
 
 void change_focus_to_next(unsigned int working_tag)
 {
@@ -606,37 +511,27 @@ void change_focus_to_next(unsigned int working_tag)
   int total_windows_in_this_tag = pertag_win[working_tag];
   int index;
 
+  printf("\nthe focused window is %lu \n", temporary);
 
-  printf("\nthe focused window is %lu \n",temporary);
-
-  for(int i=0;i<total_windows_in_this_tag;i++)
+  for (int i = 0; i < total_windows_in_this_tag; i++)
   {
-    if(temporary == clients[working_tag][i])
+    if (temporary == clients[working_tag][i])
     {
       index = i;
     }
   }
 
-
-  if(index == total_windows_in_this_tag-1) {
+  if (index == total_windows_in_this_tag - 1)
+  {
     focused = clients[working_tag][0];
   }
-  else{
-    focused = clients[working_tag][index+1];
+  else
+  {
+    focused = clients[working_tag][index + 1];
   }
 
   manage(working_tag);
-  
 }
-
-
-
-
-
-
-
-
-
 
 int wmerror(Display *display, XErrorEvent *ev)
 {
@@ -759,7 +654,6 @@ void keypress(const XKeyEvent e)
 
   /* if (e.state & Mod1Mask && */
 
-
   if (e.state & Mod1Mask)
   {
     if (ISKEY(keyBindings[0]))
@@ -842,7 +736,7 @@ void keypress(const XKeyEvent e)
     }
     else if (ISKEY(keyBindings[16]))
     {
-      //move_back(e.subwindow, working_tag);
+      // move_back(e.subwindow, working_tag);
       move_back(focused, working_tag);
       manage(working_tag);
     }
@@ -903,10 +797,11 @@ void keypress(const XKeyEvent e)
     {
       layout_no = 2;
       manage(working_tag);
-    } else if (ISKEY("N")) { 
+    }
+    else if (ISKEY("N"))
+    {
       change_focus_to_next(working_tag);
-    
-  }
+    }
   }
 }
 
@@ -987,13 +882,9 @@ void setkeys()
     MOD1BIND(keyBindings[i]);
   }
 
-
-
   // Some extra hardcoded binds
 
   MOD1BIND("Return");
-
-
 }
 
 // Adds mousebutton listeners
@@ -1006,7 +897,7 @@ Window runbar()
 {
   Screen screen = *scr;
   Display *dpy = display;
-  int win_height = barheight;
+  int win_height = barheight - 3;
   XEvent e;
 
   Window win = XCreateSimpleWindow(dpy, root, 0, 0, scr->width, win_height, 1,
@@ -1047,22 +938,18 @@ void *update_bar()
   }
 }
 
-int main(){
-
+int main()
+{
   display = XOpenDisplay(NULL);
-
   root = DefaultRootWindow(display);
-
   scr = DefaultScreenOfDisplay(display);
+  swidth = scr->width;
+  sheight = scr->height - barheight;
 
   if (!display)
-  {
     die("The display is not ready\n");
-  }
   else
-  {
     printf("Sucess getting the display\n");
-  }
 
   printf("Gonna check if another window manager exists");
 
