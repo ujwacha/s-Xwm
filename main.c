@@ -60,7 +60,7 @@ typedef struct
 } resizeset;
 resizeset wintoresize[2][2] = {{{{[0 ... 9] - 1}, 0}, {{[0 ... 9] - 1}, 0}},
                                {{{[0 ... 9] - 1}, 0}, {{[0 ... 9] - 1}, 0}}};
-int resizing = 0;
+int resizing[2] = {0, 0};
 int resizestartx = 0, resizestarty = 0;
 
 unsigned int working_tag = 0;
@@ -306,8 +306,6 @@ void plot(unsigned int working_tag)
   {
     Window working = clients[working_tag][i]; // get the window to map
     w = &clientsInfo[working_tag][i];
-
-    printf("managing window %lu, INDEX: %i\n", working, i);
 
     xpos = w->xpos;
     ypos = w->ypos;
@@ -637,8 +635,6 @@ void configureevent(const XConfigureRequestEvent e)
   changes.stack_mode = e.detail;
 
   XConfigureWindow(display, e.window, e.value_mask, &changes);
-
-  // manage(working_tag);
 }
 
 void mapevent(const XMapRequestEvent e)
@@ -935,8 +931,10 @@ void motion_event_fn(XMotionEvent e)
 
 void addtoresizeset(int winIndex, int setindex, int axis)
 {
-  if (resizing == 0)
-    resizing = 1;
+  if (axis == 0)
+    resizing[0] = 1;
+  if (axis == 1)
+    resizing[1] = 1;
   int lastpos = wintoresize[axis][setindex].setsize;
   for (int i = 0; i < lastpos; i++)
   {
@@ -964,7 +962,7 @@ void button_press(XButtonEvent e)
         swin = &clientsInfo[working_tag][j];
         if (fwin->xpos < swin->xpos)
         {
-          if ((fwin->xpos + fwin->winW - x) > -5 && (swin->xpos - x) < 5)
+          if ((fwin->xpos + fwin->winW - swin->xpos < 5) && (fwin->xpos + fwin->winW - x) > -5 && (swin->xpos - x) < 5)
           {
             addtoresizeset(i, 0, 0);
             addtoresizeset(j, 1, 0);
@@ -973,7 +971,7 @@ void button_press(XButtonEvent e)
         }
         else if (fwin->xpos > swin->xpos)
         {
-          if ((swin->xpos + swin->winW - x) > -5 && (fwin->xpos - x) < 5)
+          if ((swin->xpos + swin->winW - fwin->xpos < 5) && (swin->xpos + swin->winW - x) > -5 && (fwin->xpos - x) < 5)
           {
             addtoresizeset(j, 0, 0);
             addtoresizeset(i, 1, 0);
@@ -990,7 +988,7 @@ void button_press(XButtonEvent e)
         }
         else if (fwin->ypos > swin->ypos)
         {
-          if ((swin->ypos + swin->winH - y) > -5 && (fwin->ypos - y) < 5)
+          if ((swin->ypos + swin->winH - fwin->ypos < 5) && (swin->ypos + swin->winH - y) > -5 && (fwin->ypos - y) < 5)
           {
             addtoresizeset(j, 0, 1);
             addtoresizeset(i, 1, 1);
@@ -1012,40 +1010,45 @@ void button_press(XButtonEvent e)
 void resize(XButtonEvent e)
 {
   int endx = e.x_root, endy = e.y_root;
-
-  for (int i = 0; i < wintoresize[0][0].setsize; i++)
+  if (abs(endx - resizestartx) > 5 && resizing[0] != 0)
   {
-    int index = wintoresize[0][0].winindices[i];
-    clientsInfo[working_tag][index].winW += (endx - resizestartx);
-  }
+    for (int i = 0; i < wintoresize[0][0].setsize; i++)
+    {
+      int index = wintoresize[0][0].winindices[i];
+      clientsInfo[working_tag][index].winW += (endx - resizestartx);
+    }
 
-  for (int i = 0; i < wintoresize[0][1].setsize; i++)
+    for (int i = 0; i < wintoresize[0][1].setsize; i++)
+    {
+      int index = wintoresize[0][1].winindices[i];
+      clientsInfo[working_tag][index].winW -= (endx - resizestartx);
+      clientsInfo[working_tag][index].xpos += (endx - resizestartx);
+    }
+    resizestartx = endx;
+    plot(working_tag);
+  }
+  if (abs(endy - resizestarty) > 5 && resizing[1] != 0)
   {
-    int index = wintoresize[0][1].winindices[i];
-    clientsInfo[working_tag][index].winW -= (endx - resizestartx);
-    clientsInfo[working_tag][index].xpos += (endx - resizestartx);
-  }
+    for (int i = 0; i < wintoresize[1][0].setsize; i++)
+    {
+      int index = wintoresize[1][0].winindices[i];
+      clientsInfo[working_tag][index].winH += (endy - resizestarty);
+    }
 
-  for (int i = 0; i < wintoresize[1][0].setsize; i++)
-  {
-    int index = wintoresize[1][0].winindices[i];
-    clientsInfo[working_tag][index].winH += (endy - resizestarty);
+    for (int i = 0; i < wintoresize[1][1].setsize; i++)
+    {
+      int index = wintoresize[1][1].winindices[i];
+      clientsInfo[working_tag][index].winH -= (endy - resizestarty);
+      clientsInfo[working_tag][index].ypos += (endy - resizestarty);
+    }
+    resizestarty = endy;
+    plot(working_tag);
   }
-
-  for (int i = 0; i < wintoresize[1][1].setsize; i++)
-  {
-    int index = wintoresize[1][1].winindices[i];
-    clientsInfo[working_tag][index].winH -= (endy - resizestarty);
-    clientsInfo[working_tag][index].ypos += (endy - resizestarty);
-  }
-
-  plot(working_tag);
-  resizestartx = endx, resizestarty = endy;
 }
 
 void button_release(XButtonEvent e)
 {
-  if (resizing == 1)
+  if (resizing[0] == 1 || resizing[1] == 1)
   {
     for (int i = 0; i < 2; i++)
     {
