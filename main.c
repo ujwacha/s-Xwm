@@ -922,6 +922,18 @@ void motion_event_fn(XMotionEvent e)
   }
 }
 
+void button_press(XButtonEvent e) {
+  if (e.state & Mod1Mask) {
+    if (e.button == 1) {
+      float xpos = e.x_root;
+      xpos /= scr->width;
+      // this will resize the master
+      master_size[working_tag] = xpos;
+      manage(working_tag);
+    }
+  }
+}
+
 int handle_events(XEvent ev)
 {
 
@@ -961,6 +973,9 @@ int handle_events(XEvent ev)
     /*     manage(working_tag); */
     /*   } */
     /*   break; */
+  case ButtonPress:
+    button_press(ev.xbutton);
+   break; 
   }
 
   XSync(display, False);
