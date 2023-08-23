@@ -53,6 +53,16 @@ float master_size[TOTAL_TAGS] = {
     DEFAULT_MASTER,
 };
 
+typedef struct
+{
+  int winindices[10];
+  int setsize;
+} resizeset;
+resizeset wintoresize[2][2] = {{{{[0 ... 9] - 1}, 0}, {{[0 ... 9] - 1}, 0}},
+                               {{{[0 ... 9] - 1}, 0}, {{[0 ... 9] - 1}, 0}}};
+int resizing = 0;
+int resizestartx = 0, resizestarty = 0;
+
 unsigned int working_tag = 0;
 Window focused;
 
@@ -139,8 +149,6 @@ void move_front(Window w, unsigned int wor_tag)
   }
 }
 
-
-
 int window_index(Window w, unsigned int wor_tag)
 {
   // making a temporary window because we'll have to do some
@@ -155,11 +163,6 @@ int window_index(Window w, unsigned int wor_tag)
   }
   return -1; // error
 }
-
-
-
-
-
 
 void move_back(Window w, unsigned int wor_tag)
 {
@@ -390,7 +393,7 @@ void manage_master_stack(unsigned int working_tag)
 
   plot(working_tag);
 
-  XSetInputFocus(display, focused, RevertToParent , CurrentTime);
+  XSetInputFocus(display, focused, RevertToParent, CurrentTime);
   XRaiseWindow(display, focused);
 }
 
@@ -439,8 +442,7 @@ void manage_tree(unsigned int working_tag)
 
   plot(working_tag);
 
-
-  XSetInputFocus(display, focused, RevertToParent , CurrentTime);
+  XSetInputFocus(display, focused, RevertToParent, CurrentTime);
   XRaiseWindow(display, focused);
 }
 
@@ -513,11 +515,8 @@ void manage_centered_master(unsigned int working_tag)
 
   plot(working_tag);
 
-
-  XSetInputFocus(display, focused, RevertToParent , CurrentTime);
+  XSetInputFocus(display, focused, RevertToParent, CurrentTime);
   XRaiseWindow(display, focused);
-
-
 }
 
 void manage(unsigned int working_tag)
@@ -564,13 +563,13 @@ void change_focus_to_next(unsigned int working_tag)
   {
     focused = clients[working_tag][index + 1];
   }
-
-  manage(working_tag);
+  XSetInputFocus(display, focused, RevertToParent, CurrentTime);
+  XRaiseWindow(display, focused);
+  setBorder(focused);
+  setBorder(temporary);
 }
 
-
-
-// Credit: Suyog Bhandari 
+// Credit: Suyog Bhandari
 void change_focus_to_previous(unsigned int working_tag)
 {
   Window temporary = focused;
@@ -596,11 +595,11 @@ void change_focus_to_previous(unsigned int working_tag)
     focused = clients[working_tag][index - 1];
   }
 
-  manage(working_tag);
+  XSetInputFocus(display, focused, RevertToParent, CurrentTime);
+  XRaiseWindow(display, focused);
+  setBorder(focused);
+  setBorder(temporary);
 }
-
-
-
 
 int wmerror(Display *display, XErrorEvent *ev)
 {
@@ -639,7 +638,7 @@ void configureevent(const XConfigureRequestEvent e)
 
   XConfigureWindow(display, e.window, e.value_mask, &changes);
 
-  manage(working_tag);
+  // manage(working_tag);
 }
 
 void mapevent(const XMapRequestEvent e)
@@ -668,7 +667,7 @@ void masterchange(int inc)
 { // if it is 1, it will increase
   if (inc)
   {
-    if(master_size[working_tag] >= 0.95)
+    if (master_size[working_tag] >= 0.95)
     {
       printf(" \n the size is already maximum. \n");
       goto stop;
@@ -677,7 +676,7 @@ void masterchange(int inc)
   }
   else
   {
-    if(master_size[working_tag] <= 0.05)
+    if (master_size[working_tag] <= 0.05)
     {
       printf(" \n the size is already minimum. \n");
       goto stop;
@@ -685,7 +684,7 @@ void masterchange(int inc)
     master_size[working_tag] -= 0.05;
   }
 
-  stop:
+stop:
 }
 
 void copy_window_to_next_tag(Window w)
@@ -727,36 +726,36 @@ void move_window_to_next_tag(Window w)
   working_tag = T; \
   manage(working_tag);
 
-
-void killer() {
+void killer()
+{
   // this feature adds a but but it's still better than having no feature at all
   printf("the focused widow is %lu\n", focused);
   if (focused == barwin)
-    {
-      printf("Cant kill Bar Window\n");
-      return;
-    }
+  {
+    printf("Cant kill Bar Window\n");
+    return;
+  }
 
   int tempwindow_index = window_index(focused, working_tag);
   printf("the index is %i \n\n\n", tempwindow_index);
-  
+
   Window tempfocus;
 
-
-  if (tempwindow_index == 0 ) {
+  if (tempwindow_index == 0)
+  {
     tempfocus = clients[working_tag][1];
-  } else {
+  }
+  else
+  {
     tempfocus = clients[working_tag][tempwindow_index - 1];
   }
-  
- 
+
   XKillClient(display, focused); // Kill the window
- 
+
   focused = tempfocus;
   printf("Killed the focuse window %lu\n", focused);
   manage(working_tag);
 }
-
 
 void keypress(const XKeyEvent e)
 {
@@ -903,7 +902,9 @@ void keypress(const XKeyEvent e)
     else if (ISKEY("N"))
     {
       change_focus_to_next(working_tag);
-    } else if (ISKEY("E")) {
+    }
+    else if (ISKEY("E"))
+    {
       change_focus_to_previous(working_tag);
     }
   }
@@ -928,27 +929,134 @@ void motion_event_fn(XMotionEvent e)
     XSetInputFocus(display, e.subwindow, RevertToParent, CurrentTime);
     XRaiseWindow(display, focused);
     printf("new focus: %lu\n", focused);
-    manage(working_tag);
+    // manage(working_tag);
   }
 }
 
-void button_press(XButtonEvent e) {
-  if (e.state & Mod1Mask) {
-    if (e.button == 1) {
-      float xpos = e.x_root;
-      xpos /= scr->width;
-      // this will resize the master
-      master_size[working_tag] = xpos;
-      manage(working_tag);
+void addtoresizeset(int winIndex, int setindex, int axis)
+{
+  if (resizing == 0)
+    resizing = 1;
+  int lastpos = wintoresize[axis][setindex].setsize;
+  for (int i = 0; i < lastpos; i++)
+  {
+    if (wintoresize[axis][setindex].winindices[i] == winIndex)
+      return;
+  }
+  wintoresize[axis][setindex].winindices[lastpos] = winIndex;
+  wintoresize[axis][setindex].setsize++;
+}
+
+void button_press(XButtonEvent e)
+{
+  if (e.subwindow == None)
+  {
+    winInfo *fwin, *swin;
+    int x = e.x_root;
+    int y = e.y_root;
+    resizestartx = x;
+    resizestarty = y;
+    for (int i = 0; i < pertag_win[working_tag]; i++)
+    {
+      for (int j = i + 1; j < pertag_win[working_tag]; j++)
+      {
+        fwin = &clientsInfo[working_tag][i];
+        swin = &clientsInfo[working_tag][j];
+        if (fwin->xpos < swin->xpos)
+        {
+          if ((fwin->xpos + fwin->winW - x) > -5 && (swin->xpos - x) < 5)
+          {
+            addtoresizeset(i, 0, 0);
+            addtoresizeset(j, 1, 0);
+            continue;
+          }
+        }
+        else if (fwin->xpos > swin->xpos)
+        {
+          if ((swin->xpos + swin->winW - x) > -5 && (fwin->xpos - x) < 5)
+          {
+            addtoresizeset(j, 0, 0);
+            addtoresizeset(i, 1, 0);
+            continue;
+          }
+        }
+        if (fwin->ypos < swin->ypos)
+        {
+          if ((fwin->ypos + fwin->winH - swin->ypos < 5) && (fwin->ypos + fwin->winH - y) > -5 && (swin->ypos - y) < 5)
+          {
+            addtoresizeset(i, 0, 1);
+            addtoresizeset(j, 1, 1);
+          }
+        }
+        else if (fwin->ypos > swin->ypos)
+        {
+          if ((swin->ypos + swin->winH - y) > -5 && (fwin->ypos - y) < 5)
+          {
+            addtoresizeset(j, 0, 1);
+            addtoresizeset(i, 1, 1);
+          }
+        }
+      }
     }
   }
 
-  if (e.state & Mod4Mask) {
-    if (e.button == 3) {
+  if (e.state & Mod4Mask)
+  {
+    if (e.button == 3)
+    {
       // i don't have plans yet
     }
   }
+}
 
+void resize(XButtonEvent e)
+{
+  int endx = e.x_root, endy = e.y_root;
+
+  for (int i = 0; i < wintoresize[0][0].setsize; i++)
+  {
+    int index = wintoresize[0][0].winindices[i];
+    clientsInfo[working_tag][index].winW += (endx - resizestartx);
+  }
+
+  for (int i = 0; i < wintoresize[0][1].setsize; i++)
+  {
+    int index = wintoresize[0][1].winindices[i];
+    clientsInfo[working_tag][index].winW -= (endx - resizestartx);
+    clientsInfo[working_tag][index].xpos += (endx - resizestartx);
+  }
+
+  for (int i = 0; i < wintoresize[1][0].setsize; i++)
+  {
+    int index = wintoresize[1][0].winindices[i];
+    clientsInfo[working_tag][index].winH += (endy - resizestarty);
+  }
+
+  for (int i = 0; i < wintoresize[1][1].setsize; i++)
+  {
+    int index = wintoresize[1][1].winindices[i];
+    clientsInfo[working_tag][index].winH -= (endy - resizestarty);
+    clientsInfo[working_tag][index].ypos += (endy - resizestarty);
+  }
+
+  plot(working_tag);
+  resizestartx = endx, resizestarty = endy;
+}
+
+void button_release(XButtonEvent e)
+{
+  if (resizing == 1)
+  {
+    for (int i = 0; i < 2; i++)
+    {
+      for (int j = 0; j < 2; j++)
+      {
+        for (int k = 0; k < wintoresize[i][j].setsize; k++)
+          wintoresize[i][j].winindices[k] = -1;
+        wintoresize[i][j].setsize = 0;
+      }
+    }
+  }
 }
 
 int handle_events(XEvent ev)
@@ -968,10 +1076,6 @@ int handle_events(XEvent ev)
   case KeyPress:
     keypress(ev.xkey);
     break;
-  // case ButtonPress:
-  //   break;
-  // case MotionNotify:
-  //   break;
   case FocusIn:
     printf("focusin event just came, 0x%lx gained focus \n\n\n", ev.xfocus.window);
     break;
@@ -980,19 +1084,14 @@ int handle_events(XEvent ev)
     break;
   case MotionNotify:
     motion_event_fn(ev.xmotion);
+    resize(ev.xbutton);
     break;
-    /* case EnterNotify: */
-    /*   printf("Entered"); */
-    /*   Window entered =  ev.xcrossing.window; */
-    /*   if (entered != focused) { */
-    /*     XSetInputFocus(display, entered, RevertToParent, CurrentTime); */
-    /*     focused = entered; */
-    /*     manage(working_tag); */
-    /*   } */
-    /*   break; */
   case ButtonPress:
     button_press(ev.xbutton);
-   break; 
+    break;
+  case ButtonRelease:
+    button_release(ev.xbutton);
+    break;
   }
 
   XSync(display, False);
