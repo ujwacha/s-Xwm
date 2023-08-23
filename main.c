@@ -416,6 +416,10 @@ void manage_tree(unsigned int working_tag)
   }
 
   plot(working_tag);
+
+
+  XSetInputFocus(display, focused, RevertToParent , CurrentTime);
+  XRaiseWindow(display, focused);
 }
 
 void manage_centered_master(unsigned int working_tag)
@@ -486,6 +490,12 @@ void manage_centered_master(unsigned int working_tag)
   }
 
   plot(working_tag);
+
+
+  XSetInputFocus(display, focused, RevertToParent , CurrentTime);
+  XRaiseWindow(display, focused);
+
+
 }
 
 void manage(unsigned int working_tag)
