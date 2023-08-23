@@ -932,6 +932,13 @@ void button_press(XButtonEvent e) {
       manage(working_tag);
     }
   }
+
+  if (e.state & Mod4Mask) {
+    if (e.button == 3) {
+      // i don't have plans yet
+    }
+  }
+
 }
 
 int handle_events(XEvent ev)
