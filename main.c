@@ -665,16 +665,26 @@ void destroynotify(const XDestroyWindowEvent e)
 
 void masterchange(int inc)
 { // if it is 1, it will increase
-  // the user must make sure that this value never reaches below 0 or above 1
-  // I am too lazy to code it up right now
   if (inc)
   {
+    if (master_size[working_tag] >= 0.95)
+    {
+      printf(" \n the size is already maximum. \n");
+      goto stop;
+    }
     master_size[working_tag] += 0.05;
   }
   else
   {
+    if (master_size[working_tag] <= 0.05)
+    {
+      printf(" \n the size is already minimum. \n");
+      goto stop;
+    }
     master_size[working_tag] -= 0.05;
   }
+
+stop:
 }
 
 void copy_window_to_next_tag(Window w)
@@ -733,7 +743,7 @@ void killer()
 
   if (tempwindow_index == 0)
   {
-    // IDK what to do here, gonna do it later
+    tempfocus = clients[working_tag][1];
   }
   else
   {
