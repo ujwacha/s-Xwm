@@ -49,9 +49,8 @@ Window focused;
 
 int layout_no = 0;
 
-#define TOTALKEYS 28
-char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B","A", "N"};
-
+#define TOTALKEYS 29
+char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B","A", "N","E"};
 void read_config()
 {
   FILE *fp;
@@ -595,11 +594,6 @@ void manage(unsigned int working_tag)
   }
 }
 
-
-
-
-
-
 void change_focus_to_next(unsigned int working_tag)
 {
   Window temporary = focused;
@@ -629,14 +623,40 @@ void change_focus_to_next(unsigned int working_tag)
   
 }
 
+void change_focus_to_previous(unsigned int working_tag)
+{
+  Window temporary;
+  int revert;
+  int total_windows_in_this_tag = pertag_win[working_tag];
+  int index,i;
+
+  temporary = focused;
+
+  XGetInputFocus(display,&temporary,&revert);
 
 
+  for(i=0;i<total_windows_in_this_tag;i++)
+  {
+    if(temporary == clients[working_tag][i])
+    {
+      index = i;
+    }
+  }
 
 
+  if(index == 0)
+  {
+    XSetInputFocus(display,clients[working_tag][total_windows_in_this_tag-1],RevertToParent,CurrentTime);
+    focused = clients[working_tag][total_windows_in_this_tag-1];
+  }
+  else
+  {
+    XSetInputFocus(display,clients[working_tag][index-1],RevertToParent,CurrentTime);
+    focused = clients[working_tag][index-1];
+  }
 
-
-
-
+  manage(working_tag);
+}
 
 int wmerror(Display *display, XErrorEvent *ev)
 {
@@ -903,10 +923,12 @@ void keypress(const XKeyEvent e)
     {
       layout_no = 2;
       manage(working_tag);
-    } else if (ISKEY("N")) { 
+    } else if (ISKEY(keyBindings[27])) { 
       change_focus_to_next(working_tag);
-    
   }
+      else if(ISKEY(keyBindings[28])){
+          change_focus_to_previous(working_tag);
+      }
   }
 }
 
