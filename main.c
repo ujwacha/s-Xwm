@@ -367,6 +367,9 @@ void manage_master_stack(unsigned int working_tag)
   }
 
   plot(working_tag);
+
+  XSetInputFocus(display, focused, RevertToParent , CurrentTime);
+  XRaiseWindow(display, focused);
 }
 
 void manage_tree(unsigned int working_tag)
@@ -658,7 +661,6 @@ void keypress(const XKeyEvent e)
   {
     if (ISKEY(keyBindings[0]))
     {
-      Window focused = e.subwindow;
       printf("the focused widow is %lu\n", focused);
       if (focused == barwin)
       {
