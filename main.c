@@ -14,6 +14,7 @@
 Display *display;
 Window root;
 Screen *scr;
+int swidth, sheight; // width and height of space available to plot windows
 
 int barheight = 22;
 int border_width = 2;
@@ -23,13 +24,22 @@ XEvent ev;
 unsigned long border_pixel = 5;
 char buffer[1024]; // 1kb buffer for doing stuff later
 
+typedef struct
+{ // for storing windows dimension and position
+  int winW;
+  int winH;
+  int xpos;
+  int ypos;
+} winInfo;
+
 /// We here define a 2d array
 // I hope nobody opens more than 255 windows in a tag, that'd buffer overflow
 // the system
 // this is the vital security flaw of this window manager
 
-Window clients[255][TOTAL_TAGS] = {0};
+Window clients[TOTAL_TAGS][30] = {0};
 unsigned int pertag_win[TOTAL_TAGS] = {0};
+winInfo clientsInfo[TOTAL_TAGS][30] = {0};
 float master_size[TOTAL_TAGS] = {
     DEFAULT_MASTER,
     DEFAULT_MASTER,
@@ -46,7 +56,7 @@ float master_size[TOTAL_TAGS] = {
 unsigned int working_tag = 0;
 Window focused;
 
-int layout_no = 2;
+int layout_no = 0;
 
 #define TOTALKEYS 27
 char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A"};
@@ -223,33 +233,6 @@ void unmap_all()
   }
 }
 
-// Maps the window with adjusted spacing between windows.
-void plot(Window window, int posx, int posy, int width, int height)
-{
-  // position of opposite pixel of window
-  int oposx = posx + width;
-  int oposy = posy + height;
-  if (posx == 0)
-  {
-    posx += border_pixel;
-    width -= border_pixel;
-  }
-  if (posy == 0)
-  {
-    posy += border_pixel;
-    height -= border_pixel;
-  }
-  if (oposx > scr->width - 5 && oposx < scr->width + 5)
-    width -= border_pixel;
-  if (oposy > scr->height - barheight - 5 && oposy < scr->height - barheight + 5)
-    height -= (border_pixel - 5);
-  posx += border_pixel;
-  posy += border_pixel;
-  width -= (2 * border_pixel + 5);
-  height -= (2 * border_pixel + 5);
-  XMoveResizeWindow(display, window, posx, posy, width, height);
-}
-
 void setBorder(Window window)
 {
   Colormap cmap = DefaultColormap(display, DefaultScreen(display));
@@ -274,6 +257,50 @@ void setBorder(Window window)
   XSetWindowBorderWidth(display, window, border_width);
 }
 
+// Maps the window with adjusted spacing between windows.
+void plot(unsigned int working_tag)
+{
+  // position two corner pixels and width height of window
+  int xpos, ypos, oxpos, oypos, winW, winH;
+  winInfo *w;
+
+  for (int i = 0; i < pertag_win[working_tag]; i++)
+  {
+    Window working = clients[working_tag][i]; // get the window to map
+    w = &clientsInfo[working_tag][i];
+
+    printf("managing window %lu, INDEX: %i\n", working, i);
+
+    xpos = w->xpos;
+    ypos = w->ypos;
+    winW = w->winW;
+    winH = w->winH;
+    oxpos = xpos + winW;
+    oypos = ypos + winH;
+    if (xpos == 0)
+    {
+      xpos += border_pixel;
+      winW -= border_pixel;
+    }
+    if (ypos == 0)
+    {
+      ypos += border_pixel;
+      winH -= border_pixel;
+    }
+    if (oxpos > swidth - 5 && oxpos < swidth + 5)
+      winW -= border_pixel;
+    if (oypos > sheight - 5 && oypos < sheight + 5)
+      winH -= (border_pixel - 5);
+    xpos += border_pixel;
+    ypos += border_pixel;
+    winW -= (2 * border_pixel + 5);
+    winH -= (2 * border_pixel + 5);
+    setBorder(working);
+    XMoveResizeWindow(display, working, xpos, ypos, winW, winH);
+    XMapWindow(display, working);
+  }
+}
+
 void manage_master_stack(unsigned int working_tag)
 {
   float master = master_size[working_tag];
@@ -281,61 +308,50 @@ void manage_master_stack(unsigned int working_tag)
 
   printf("the master size is %f\n", master);
 
-  int height = scr->height;
-  int width = scr->width;
-
-  // width and height of window.
-  int winwidth;
-  int winheight;
-
-  height -= barheight;
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
   unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
 
+  // stores the dimension and position of a window in tag
+  winInfo *w = &clientsInfo[working_tag][0];
+
+  // window info
+
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
 
-  for (int i = 0; i < pertag_win[working_tag]; i++)
+  // set winInfo for master window
+  if (total_windows_in_this_tag == 1)
+  { // take the full size if it is the only window
+    w->winW = swidth;
+    w->winH = sheight;
+  }
+  else
+  {
+    w->winW = swidth * master;
+    w->winH = sheight;
+  }
+  w->xpos = 0;
+  w->ypos = 0;
+
+  // set winInfo for stacks
+  for (int i = 1; i < pertag_win[working_tag]; i++)
   {
     Window working = clients[working_tag][i]; // get the window to map
+    w = &clientsInfo[working_tag][i];
 
     printf("managing window %lu, INDEX: %i\n", working, i);
 
-    setBorder(working);
+    printf("window %lu is a slave\n", working);
+    w->winH = sheight / total_stacks_in_this_tag;
+    w->winW = swidth * slave;
+    printf("HEIGHT: %i, WIDTH: %i\n", w->winH, w->winW);
 
-    XMapWindow(display, working);
+    w->xpos = swidth * master;
+    w->ypos = w->winH * (i - 1);
 
-    if (i == 0)
-    { // this means it is the master window
-      printf("window %lu is a master\n", working);
-
-      if (total_windows_in_this_tag == 1)
-      { // take the full size if it is the only window
-        winwidth = width;
-        winheight = height;
-      }
-      else
-      {
-        winwidth = width * master;
-        winheight = height;
-      }
-      // moving the window to the place of the master
-      plot(working, 0, 0, winwidth, winheight);
-    }
-    else
-    { // this means it is the stack window
-      printf("window %lu is a slave\n", working);
-      winheight = height / total_stacks_in_this_tag;
-      winwidth = width * slave;
-      printf("HEIGHT: %i, WIDTH: %i\n", winheight, winwidth);
-
-      int xpos = width * master;
-      int ypos = winheight * (i - 1);
-
-      printf("the position is (%i, %i)\n", xpos, ypos);
-
-      plot(working, xpos, ypos, winwidth, winheight);
-    }
+    printf("the position is (%i, %i)\n", w->xpos, w->ypos);
   }
+
+  plot(working_tag);
 }
 
 void manage_tree(unsigned int working_tag)
@@ -343,59 +359,45 @@ void manage_tree(unsigned int working_tag)
   float master = master_size[working_tag];
   float slave = 1.0 - master;
 
-  struct winInfo
-  { // for storing windows dimension and position
-    int winW;
-    int winH;
-    int xpos;
-    int ypos;
-  };
   printf("the master size is %f\n", master);
-
-  int height = scr->height - barheight;
-  int width = scr->width;
 
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
   unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
 
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
 
-  struct winInfo w[total_windows_in_this_tag]; // stores the dimension and position of windows in tag
+  // stores the dimension and position of a window in tag
+  winInfo *w = &clientsInfo[working_tag][0];
+  winInfo *pw;
 
-  w[0].winH = height; // for master window
-  w[0].winW = width;
-  w[0].xpos = 0;
-  w[0].ypos = 0;
+  w->winH = sheight; // for master window
+  w->winW = swidth;
+  w->xpos = 0;
+  w->ypos = 0;
 
-  for (int i = 1; i < total_windows_in_this_tag; i++)
+  for (int i = 1; i < total_windows_in_this_tag; i++, w++)
   { // gives each window their required dimensions and position
+    w = &clientsInfo[working_tag][i];
+    pw = &clientsInfo[working_tag][i - 1];
     if (i % 2 == 1)
     {
-      w[i].winW = w[i - 1].winW * (1 - master);
-      w[i - 1].winW *= master;
-      w[i].winH = w[i - 1].winH;
-      w[i].xpos = w[i - 1].xpos + w[i - 1].winW;
-      w[i].ypos = w[i - 1].ypos;
+      w->winW = pw->winW * (1 - master);
+      pw->winW *= master;
+      w->winH = pw->winH;
+      w->xpos = pw->xpos + pw->winW;
+      w->ypos = pw->ypos;
     }
     else
     {
-      w[i].winH = w[i - 1].winH * (1 - master);
-      w[i - 1].winH *= master;
-      w[i].winW = w[i - 1].winW;
-      w[i].ypos = w[i - 1].ypos + w[i - 1].winH;
-      w[i].xpos = w[i - 1].xpos;
+      w->winH = pw->winH * (1 - master);
+      pw->winH *= master;
+      w->winW = pw->winW;
+      w->ypos = pw->ypos + pw->winH;
+      w->xpos = pw->xpos;
     }
   }
-  for (int i = 0; i < total_windows_in_this_tag; i++)
-  {
-    Window working = clients[working_tag][i]; // get the window to map
 
-    printf("managing window %lu, INDEX: %i\n", working, i);
-
-    setBorder(working);
-    XMapWindow(display, working);
-    plot(working, w[i].xpos, w[i].ypos, w[i].winW, w[i].winH);
-  }
+  plot(working_tag);
 }
 
 void manage_centered_master(unsigned int working_tag)
@@ -404,17 +406,6 @@ void manage_centered_master(unsigned int working_tag)
   float slave = 1.0 - master;
 
   printf("the master size is %f\n", master);
-
-  struct winInfo // for storing windows dimension and position
-  {
-    unsigned int winW;
-    unsigned int winH;
-    unsigned int xpos;
-    unsigned int ypos;
-  };
-
-  int height = scr->height - barheight;
-  int width = scr->width;
 
   unsigned int total_windows_in_this_tag = pertag_win[working_tag];
   unsigned int total_stacks_in_this_tag = total_windows_in_this_tag - 1;
@@ -425,75 +416,58 @@ void manage_centered_master(unsigned int working_tag)
 
   printf("Total Windows in tag %i : %i\n", working_tag, total_windows_in_this_tag);
 
-  struct winInfo w[total_windows_in_this_tag]; // stores the dimension and position of windows in tag
-
-  Colormap cmap = DefaultColormap(display, DefaultScreen(display));
-
-  XColor border_color_r, exactColor_r;
-  Status status = XAllocNamedColor(display, cmap, "red", &border_color_r, &exactColor_r);
-
-  XColor border_color_b, exactColor_b;
-  Status another_status = XAllocNamedColor(display, cmap, "blue", &border_color_b, &exactColor_b);
+  winInfo *w = &clientsInfo[working_tag][0]; // stores the dimension and position of windows in tag
 
   if (total_windows_in_this_tag == 1)
   {
-    w[0].winH = height;
-    w[0].winW = width;
-    w[0].xpos = 0;
-    w[0].ypos = 0;
+    w->winH = sheight;
+    w->winW = swidth;
+    w->xpos = 0;
+    w->ypos = 0;
   }
 
   else if (total_windows_in_this_tag == 2)
   {
-    w[0].winH = height;
-    w[0].winW = width * 0.6;
-    w[0].xpos = 0;
-    w[0].ypos = 0;
+    w->winH = sheight;
+    w->winW = swidth * 0.6;
+    w->xpos = 0;
+    w->ypos = 0;
 
-    w[1].winH = height;
-    w[1].winW = width - w[0].winW;
-    w[1].xpos = w[0].winW;
-    w[1].ypos = 0;
+    (w + 1)->winH = sheight;
+    (w + 1)->winW = swidth - w->winW;
+    (w + 1)->xpos = w->winW;
+    (w + 1)->ypos = 0;
   }
 
   else
   {
-    w[0].winH = height;
-    w[0].winW = width * 0.5;
-    w[0].xpos = width * 0.25;
-    w[0].ypos = 0;
+    w->winH = sheight;
+    w->winW = swidth * 0.5;
+    w->xpos = swidth * 0.25;
+    w->ypos = 0;
 
     for (int i = total_stacks_in_this_tag; i > 0; i--)
     {
+      w = &clientsInfo[working_tag][i];
       if (i % 2 != 0)
       {
-        w[i].winW = width * 0.25;
-        w[i].winH = (height) / ((total_stacks_in_this_tag + 1) / 2);
-        w[i].xpos = width * 0.75;
-        w[i].ypos = ((height) / ((total_stacks_in_this_tag + 1) / 2)) * ((i - 1) / 2);
+        w->winW = swidth * 0.25;
+        w->winH = (sheight) / ((total_stacks_in_this_tag + 1) / 2);
+        w->xpos = swidth * 0.75;
+        w->ypos = ((sheight) / ((total_stacks_in_this_tag + 1) / 2)) * ((i - 1) / 2);
       }
 
       else
       {
-        w[i].winW = width * 0.25;
-        w[i].winH = (height) / (total_stacks_in_this_tag / 2);
-        w[i].xpos = 0;
-        w[i].ypos = ((height) / (total_stacks_in_this_tag / 2)) * ((i - 2) / 2);
+        w->winW = swidth * 0.25;
+        w->winH = (sheight) / (total_stacks_in_this_tag / 2);
+        w->xpos = 0;
+        w->ypos = ((sheight) / (total_stacks_in_this_tag / 2)) * ((i - 2) / 2);
       }
     }
   }
 
-  for (int i = 0; i < pertag_win[working_tag]; i++)
-  {
-    Window working = clients[working_tag][i]; // get the window to map
-
-    printf("managing window %lu, INDEX: %i\n", working, i);
-
-    setBorder(working);
-    XMapWindow(display, working);
-
-    plot(working, w[i].xpos, w[i].ypos, w[i].winW, w[i].winH);
-  }
+  plot(working_tag);
 }
 
 void manage(unsigned int working_tag)
@@ -911,21 +885,16 @@ void *update_bar()
 
 int main()
 {
-
   display = XOpenDisplay(NULL);
-
   root = DefaultRootWindow(display);
-
   scr = DefaultScreenOfDisplay(display);
+  swidth = scr->width;
+  sheight = scr->height - barheight;
 
   if (!display)
-  {
     die("The display is not ready\n");
-  }
   else
-  {
     printf("Sucess getting the display\n");
-  }
 
   printf("Gonna check if another window manager exists");
 
