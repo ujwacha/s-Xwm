@@ -60,7 +60,7 @@ typedef struct
 } resizeset;
 resizeset wintoresize[2][2] = {{{{[0 ... 9] - 1}, 0}, {{[0 ... 9] - 1}, 0}},
                                {{{[0 ... 9] - 1}, 0}, {{[0 ... 9] - 1}, 0}}};
-int resizing = 0;
+int resizing[2] = {0, 0};
 int resizestartx = 0, resizestarty = 0;
 
 unsigned int working_tag = 0;
@@ -68,8 +68,8 @@ Window focused;
 
 int layout_no = 0;
 
-#define TOTALKEYS 30 
-char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A", "N", "E", "F"};
+#define TOTALKEYS 32
+char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A", "N", "E", "F", "V", "G"};
 
 void read_config()
 {
@@ -306,8 +306,6 @@ void plot(unsigned int working_tag)
   {
     Window working = clients[working_tag][i]; // get the window to map
     w = &clientsInfo[working_tag][i];
-
-    printf("managing window %lu, INDEX: %i\n", working, i);
 
     xpos = w->xpos;
     ypos = w->ypos;
@@ -637,8 +635,6 @@ void configureevent(const XConfigureRequestEvent e)
   changes.stack_mode = e.detail;
 
   XConfigureWindow(display, e.window, e.value_mask, &changes);
-
-  // manage(working_tag);
 }
 
 void mapevent(const XMapRequestEvent e)
@@ -743,6 +739,7 @@ void killer()
 
   if (tempwindow_index == 0)
   {
+    tempfocus = barwin;
   }
   else
   {
@@ -755,7 +752,6 @@ void killer()
   printf("Killed the focuse window %lu\n", focused);
   manage(working_tag);
 }
-
 
 void killer_point(XKeyEvent e)
 {
@@ -774,9 +770,6 @@ void keypress(const XKeyEvent e)
     if (ISKEY(keyBindings[0]))
     {
       killer();
-    }
-    else if (ISKEY("F")) {
-      killer_point(e);
     }
     else if (ISKEY(keyBindings[1]))
     {
@@ -908,13 +901,27 @@ void keypress(const XKeyEvent e)
       layout_no = 2;
       manage(working_tag);
     }
-    else if (ISKEY("N"))
+    else if (ISKEY(keyBindings[27]))
     {
       change_focus_to_next(working_tag);
     }
-    else if (ISKEY("E"))
+    else if (ISKEY(keyBindings[28]))
     {
       change_focus_to_previous(working_tag);
+    }
+    else if (ISKEY(keyBindings[29]))
+    {
+      killer_point(e);
+    }
+    else if (ISKEY(keyBindings[30]))
+    {
+      border_pixel = (border_pixel > 2) ? (border_pixel - 2) : 1;
+      plot(working_tag);
+    }
+    else if (ISKEY(keyBindings[31]))
+    {
+      border_pixel = (border_pixel < 15) ? (border_pixel + 2) : border_pixel;
+      plot(working_tag);
     }
   }
 }
@@ -931,12 +938,15 @@ void motion_event_fn(XMotionEvent e)
   /* unsigned int mask; */
   /* XQueryPointer(display, root, &root, &hoverWin, &rootX, &rootY, &winX, &winY, &mask); */
 
-  if (e.subwindow != focused)
+  if (e.subwindow != None && e.subwindow != focused)
   {
+    Window temp = focused;
     printf("focusing\n");
     focused = e.subwindow;
     XSetInputFocus(display, e.subwindow, RevertToParent, CurrentTime);
     XRaiseWindow(display, focused);
+    setBorder(focused);
+    setBorder(temp);
     printf("new focus: %lu\n", focused);
     // manage(working_tag);
   }
@@ -944,8 +954,10 @@ void motion_event_fn(XMotionEvent e)
 
 void addtoresizeset(int winIndex, int setindex, int axis)
 {
-  if (resizing == 0)
-    resizing = 1;
+  if (axis == 0)
+    resizing[0] = 1;
+  if (axis == 1)
+    resizing[1] = 1;
   int lastpos = wintoresize[axis][setindex].setsize;
   for (int i = 0; i < lastpos; i++)
   {
@@ -973,7 +985,7 @@ void button_press(XButtonEvent e)
         swin = &clientsInfo[working_tag][j];
         if (fwin->xpos < swin->xpos)
         {
-          if ((fwin->xpos + fwin->winW - x) > -5 && (swin->xpos - x) < 5)
+          if ((fwin->xpos + fwin->winW - swin->xpos < 5) && (fwin->xpos + fwin->winW - x) > -5 && (swin->xpos - x) < 5)
           {
             addtoresizeset(i, 0, 0);
             addtoresizeset(j, 1, 0);
@@ -982,7 +994,7 @@ void button_press(XButtonEvent e)
         }
         else if (fwin->xpos > swin->xpos)
         {
-          if ((swin->xpos + swin->winW - x) > -5 && (fwin->xpos - x) < 5)
+          if ((swin->xpos + swin->winW - fwin->xpos < 5) && (swin->xpos + swin->winW - x) > -5 && (fwin->xpos - x) < 5)
           {
             addtoresizeset(j, 0, 0);
             addtoresizeset(i, 1, 0);
@@ -999,7 +1011,7 @@ void button_press(XButtonEvent e)
         }
         else if (fwin->ypos > swin->ypos)
         {
-          if ((swin->ypos + swin->winH - y) > -5 && (fwin->ypos - y) < 5)
+          if ((swin->ypos + swin->winH - fwin->ypos < 5) && (swin->ypos + swin->winH - y) > -5 && (fwin->ypos - y) < 5)
           {
             addtoresizeset(j, 0, 1);
             addtoresizeset(i, 1, 1);
@@ -1020,41 +1032,52 @@ void button_press(XButtonEvent e)
 
 void resize(XButtonEvent e)
 {
-  int endx = e.x_root, endy = e.y_root;
-
-  for (int i = 0; i < wintoresize[0][0].setsize; i++)
+  int endx = e.x_root, endy = e.y_root, diff = 3;
+  if (abs(endx - resizestartx) > 5 && resizing[0] != 0)
+  // if (resizing[0] != 0)
   {
-    int index = wintoresize[0][0].winindices[i];
-    clientsInfo[working_tag][index].winW += (endx - resizestartx);
-  }
+    for (int i = 0; i < wintoresize[0][0].setsize; i++)
+    {
+      int index = wintoresize[0][0].winindices[i];
+      clientsInfo[working_tag][index].winW += (endx - resizestartx);
+    }
 
-  for (int i = 0; i < wintoresize[0][1].setsize; i++)
+    for (int i = 0; i < wintoresize[0][1].setsize; i++)
+    {
+      int index = wintoresize[0][1].winindices[i];
+      clientsInfo[working_tag][index].winW -= (endx - resizestartx);
+      clientsInfo[working_tag][index].xpos += (endx - resizestartx);
+    }
+    diff = (abs(endx - resizestartx) > diff) ? abs(endx - resizestartx) : diff;
+    resizestartx = endx;
+    plot(working_tag);
+    usleep(100 / diff);
+  }
+  if (abs(endy - resizestarty) > 5 && resizing[1] != 0)
+  // if (resizing[1] != 0)
   {
-    int index = wintoresize[0][1].winindices[i];
-    clientsInfo[working_tag][index].winW -= (endx - resizestartx);
-    clientsInfo[working_tag][index].xpos += (endx - resizestartx);
-  }
+    for (int i = 0; i < wintoresize[1][0].setsize; i++)
+    {
+      int index = wintoresize[1][0].winindices[i];
+      clientsInfo[working_tag][index].winH += (endy - resizestarty);
+    }
 
-  for (int i = 0; i < wintoresize[1][0].setsize; i++)
-  {
-    int index = wintoresize[1][0].winindices[i];
-    clientsInfo[working_tag][index].winH += (endy - resizestarty);
+    for (int i = 0; i < wintoresize[1][1].setsize; i++)
+    {
+      int index = wintoresize[1][1].winindices[i];
+      clientsInfo[working_tag][index].winH -= (endy - resizestarty);
+      clientsInfo[working_tag][index].ypos += (endy - resizestarty);
+    }
+    diff = (abs(endy - resizestarty) > diff) ? abs(endy - resizestarty) : diff;
+    resizestarty = endy;
+    plot(working_tag);
+    usleep(100 / diff);
   }
-
-  for (int i = 0; i < wintoresize[1][1].setsize; i++)
-  {
-    int index = wintoresize[1][1].winindices[i];
-    clientsInfo[working_tag][index].winH -= (endy - resizestarty);
-    clientsInfo[working_tag][index].ypos += (endy - resizestarty);
-  }
-
-  plot(working_tag);
-  resizestartx = endx, resizestarty = endy;
 }
 
 void button_release(XButtonEvent e)
 {
-  if (resizing == 1)
+  if (resizing[0] == 1 || resizing[1] == 1)
   {
     for (int i = 0; i < 2; i++)
     {
@@ -1066,6 +1089,8 @@ void button_release(XButtonEvent e)
       }
     }
   }
+  resizing[0] = 0;
+  resizing[1] = 0;
 }
 
 int handle_events(XEvent ev)
@@ -1092,7 +1117,8 @@ int handle_events(XEvent ev)
     printf("focusout event just came, 0x%lx gained focus \n\n\n", ev.xfocus.window);
     break;
   case MotionNotify:
-    motion_event_fn(ev.xmotion);
+    if (resizing[0] == 0 && resizing[1] == 0)
+      motion_event_fn(ev.xmotion);
     resize(ev.xbutton);
     break;
   case ButtonPress:
