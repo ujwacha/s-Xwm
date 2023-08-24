@@ -68,8 +68,8 @@ Window focused;
 
 int layout_no = 0;
 
-#define TOTALKEYS 30
-char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A", "N", "E", "F"};
+#define TOTALKEYS 32
+char keyBindings[TOTALKEYS][2] = {"Q", "D", "M", "J", "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "H", "L", "T", "C", "O", "P", "Y", "I", "W", "R", "B", "A", "N", "E", "F", "V", "G"};
 
 void read_config()
 {
@@ -739,6 +739,7 @@ void killer()
 
   if (tempwindow_index == 0)
   {
+    tempfocus = barwin;
   }
   else
   {
@@ -769,10 +770,6 @@ void keypress(const XKeyEvent e)
     if (ISKEY(keyBindings[0]))
     {
       killer();
-    }
-    else if (ISKEY("F"))
-    {
-      killer_point(e);
     }
     else if (ISKEY(keyBindings[1]))
     {
@@ -904,13 +901,27 @@ void keypress(const XKeyEvent e)
       layout_no = 2;
       manage(working_tag);
     }
-    else if (ISKEY("N"))
+    else if (ISKEY(keyBindings[27]))
     {
       change_focus_to_next(working_tag);
     }
-    else if (ISKEY("E"))
+    else if (ISKEY(keyBindings[28]))
     {
       change_focus_to_previous(working_tag);
+    }
+    else if (ISKEY(keyBindings[29]))
+    {
+      killer_point(e);
+    }
+    else if (ISKEY(keyBindings[30]))
+    {
+      border_pixel = (border_pixel > 2) ? (border_pixel - 2) : 1;
+      plot(working_tag);
+    }
+    else if (ISKEY(keyBindings[31]))
+    {
+      border_pixel = (border_pixel < 15) ? (border_pixel + 2) : border_pixel;
+      plot(working_tag);
     }
   }
 }
@@ -927,12 +938,15 @@ void motion_event_fn(XMotionEvent e)
   /* unsigned int mask; */
   /* XQueryPointer(display, root, &root, &hoverWin, &rootX, &rootY, &winX, &winY, &mask); */
 
-  if (e.subwindow != focused)
+  if (e.subwindow != None && e.subwindow != focused)
   {
+    Window temp = focused;
     printf("focusing\n");
     focused = e.subwindow;
     XSetInputFocus(display, e.subwindow, RevertToParent, CurrentTime);
     XRaiseWindow(display, focused);
+    setBorder(focused);
+    setBorder(temp);
     printf("new focus: %lu\n", focused);
     // manage(working_tag);
   }
@@ -1018,8 +1032,9 @@ void button_press(XButtonEvent e)
 
 void resize(XButtonEvent e)
 {
-  int endx = e.x_root, endy = e.y_root;
+  int endx = e.x_root, endy = e.y_root, diff = 3;
   if (abs(endx - resizestartx) > 5 && resizing[0] != 0)
+  // if (resizing[0] != 0)
   {
     for (int i = 0; i < wintoresize[0][0].setsize; i++)
     {
@@ -1033,10 +1048,13 @@ void resize(XButtonEvent e)
       clientsInfo[working_tag][index].winW -= (endx - resizestartx);
       clientsInfo[working_tag][index].xpos += (endx - resizestartx);
     }
+    diff = (abs(endx - resizestartx) > diff) ? abs(endx - resizestartx) : diff;
     resizestartx = endx;
     plot(working_tag);
+    usleep(100 / diff);
   }
   if (abs(endy - resizestarty) > 5 && resizing[1] != 0)
+  // if (resizing[1] != 0)
   {
     for (int i = 0; i < wintoresize[1][0].setsize; i++)
     {
@@ -1050,8 +1068,10 @@ void resize(XButtonEvent e)
       clientsInfo[working_tag][index].winH -= (endy - resizestarty);
       clientsInfo[working_tag][index].ypos += (endy - resizestarty);
     }
+    diff = (abs(endy - resizestarty) > diff) ? abs(endy - resizestarty) : diff;
     resizestarty = endy;
     plot(working_tag);
+    usleep(100 / diff);
   }
 }
 
@@ -1069,6 +1089,8 @@ void button_release(XButtonEvent e)
       }
     }
   }
+  resizing[0] = 0;
+  resizing[1] = 0;
 }
 
 int handle_events(XEvent ev)
@@ -1095,7 +1117,8 @@ int handle_events(XEvent ev)
     printf("focusout event just came, 0x%lx gained focus \n\n\n", ev.xfocus.window);
     break;
   case MotionNotify:
-    motion_event_fn(ev.xmotion);
+    if (resizing[0] == 0 && resizing[1] == 0)
+      motion_event_fn(ev.xmotion);
     resize(ev.xbutton);
     break;
   case ButtonPress:
